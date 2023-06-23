@@ -36,7 +36,7 @@ payout_difference_map <- tm_shape(texas_county_differences) +
   tm_layout(frame = FALSE)
 
 payout_difference_map
-tmap_save(payout_difference_map, filename = "/Users/ram/Desktop/payout-differences.png")
+tmap_save(payout_difference_map, filename = file.path(path, "payout-differences.png"))
 
 # # Total CPC indemnity payout by county
 # total_CPC_indemnity_by_county <- payout_df %>%

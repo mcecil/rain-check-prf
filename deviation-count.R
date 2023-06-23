@@ -30,66 +30,42 @@ CPC_grids <- CPC_grids[CPC_grids$GRIDCODE %in% tx_grids$GRIDCODE, ]
 
 CPC_grids_deviations <- merge(CPC_grids, tx_deviation_df)
 
-
-CPC_grids_deviations_90_map <- tm_shape(texas) +
-  tm_borders() +
-  tm_shape(CPC_grids_deviations) +
-  tm_fill(col = "cpc_payout_90_count", palette = "Blues", legend.show = FALSE) +
-  tm_borders(col = "grey60", lwd = 0.5) +
-  tm_layout(frame = FALSE)
-
-CPC_grids_deviations_80_map <- tm_shape(texas) +
-  tm_borders() +
-  tm_shape(CPC_grids_deviations) +
-  tm_fill(col = "cpc_payout_80_count", palette = "Blues", legend.show = FALSE) +
-  tm_borders(col = "grey60", lwd = 0.5) +
-  tm_layout(frame = FALSE)
-
-CPC_grids_deviations_70_map <- tm_shape(texas) +
-  tm_borders() +
-  tm_shape(CPC_grids_deviations) +
-  tm_fill(col = "cpc_payout_70_count", palette = "Blues", legend.show = FALSE) +
-  tm_borders(col = "grey60", lwd = 0.5) +
-  tm_layout(frame = FALSE)
-
-CHIRPS_grids_deviations_90_map <- tm_shape(texas) +
-  tm_borders() +
-  tm_shape(CPC_grids_deviations) +
-  tm_fill(col = "chirps_payout_90_count", palette = "Blues", legend.show = FALSE) +
-  tm_borders(col = "grey60", lwd = 0.5) +
-  tm_layout(frame = FALSE)
-
-CHIRPS_grids_deviations_80_map <- tm_shape(texas) +
-  tm_borders() +
-  tm_shape(CPC_grids_deviations) +
-  tm_fill(col = "chirps_payout_80_count", palette = "Blues", legend.show = FALSE) +
-  tm_borders(col = "grey60", lwd = 0.5) +
-  tm_layout(frame = FALSE)
-
-CHIRPS_grids_deviations_70_map <- tm_shape(texas) +
-  tm_borders() +
-  tm_shape(CPC_grids_deviations) +
-  tm_fill(col = "chirps_payout_70_count", palette = "Blues", legend.show = FALSE) +
-  tm_borders(col = "grey60", lwd = 0.5) +
-  tm_layout(frame = FALSE)
-
-# legend <- tm_shape(texas) +
-#   tm_borders() +
-#   tm_shape(CPC_grids_deviations) +
-#   tm_fill(col = "chirps_payout_70_count", palette = "Blues", title = "Count") +
-#   tm_layout(legend.only= TRUE)
+create_grids_deviation_map <- function(data) {
+  grids_deviation_map <- tm_shape(texas) +
+    tm_borders() +
+    tm_shape(CPC_grids_deviations) +
+    # Setting fixed style so that all maps have consistent comparable scale
+    tm_fill(col = data, palette = "Blues", style = "fixed", breaks = c(1, 201, 401, 601, 801, 1001, 1200),
+            legend.show = FALSE) +
+    tm_borders(col = "grey60", lwd = 0.5) +
+    tm_layout(frame = FALSE)
+  
+  return(tmap_grob(grids_deviation_map))
+}
 
 choropleth_panel <- plot_grid(
-  tmap_grob(CPC_grids_deviations_90_map), tmap_grob(CHIRPS_grids_deviations_90_map),
-  tmap_grob(CPC_grids_deviations_80_map), tmap_grob(CHIRPS_grids_deviations_80_map),
-  tmap_grob(CPC_grids_deviations_70_map), tmap_grob(CHIRPS_grids_deviations_70_map),
+  create_grids_deviation_map("cpc_payout_90_count"), create_grids_deviation_map("chirps_payout_90_count"),
+  create_grids_deviation_map("cpc_payout_80_count"), create_grids_deviation_map("chirps_payout_80_count"),
+  create_grids_deviation_map("cpc_payout_70_count"), create_grids_deviation_map("chirps_payout_70_count"),
   ncol = 2
 )
 
 choropleth_panel
 
-#ggsave("/Users/ram/Desktop/deviations-1.png", plot = choropleth_panel)
-# tmap_save(legend, filename = "/Users/ram/Desktop/chirps_payout_70_count-legend.png")
+# ggsave(file.path(path, "deviations.png"), plot = choropleth_panel)
+
+
+# create_legend <- function(data) {
+#   legend <- tm_shape(texas) +
+#     tm_borders() +
+#     tm_shape(CPC_grids_deviations) +
+#     tm_fill(col = data, palette = "Blues", title = "Count", style = "fixed", breaks = c(1, 201, 401, 601, 801, 1001, 1200)) +
+#     tm_layout(legend.only = TRUE)
+#   
+#   return(legend)
+# }
+# 
+# tmap_save(create_legend("cpc_payout_90_count"), filename = file.path(path, "cpc_payout_90_count-legend.png"))
 
 
 
