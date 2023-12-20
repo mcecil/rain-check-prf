@@ -4,7 +4,7 @@ import os
 import time
 
 states = {
-    "Texas": 48
+    "Virginia": 51
 }
 
 MAX_RETRIES = 9
@@ -136,14 +136,15 @@ for coverage_level in range(70, 95, 5):
             print("Irrigation Type", irrigationType)
             print("Coverage Level", coverage_level)
 
-            if os.path.isfile(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv"):
-                df = pd.read_csv(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv")
-                last_county = df["County Name"].iloc[-1]
-                if state_code == 48 and last_county == "Zavala":
-                    print("Skipping...")
-                    continue
             try:
                 counties = get_counties(state_code)
+
+                if os.path.isfile(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv"):
+                    df = pd.read_csv(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv")
+                    last_county = df["County Name"].iloc[-1]
+                    if last_county == counties[-1]["Name"]:
+                        print("Skipping...")
+                        continue
 
                 skip = False
                 if last_county != "":
