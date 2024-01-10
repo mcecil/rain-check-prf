@@ -2,9 +2,10 @@ import requests
 import pandas as pd
 import os
 import time
+import csv
 
 states = {
-    "Virginia": 51
+    "Texas": "48"
 }
 
 MAX_RETRIES = 9
@@ -127,7 +128,6 @@ mapping = {
 errors= []
 for coverage_level in range(70, 95, 5):
     for year in range(2007, 2022):
-        last_county = ""
         irrigationType = mapping[coverage_level]
 
         for state_name, state_code in states.items():
@@ -139,12 +139,41 @@ for coverage_level in range(70, 95, 5):
             try:
                 counties = get_counties(state_code)
 
-                if os.path.isfile(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv"):
-                    df = pd.read_csv(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv")
-                    last_county = df["County Name"].iloc[-1]
-                    if last_county == counties[-1]["Name"]:
-                        print("Skipping...")
-                        continue
+                headers = ["State Name", "State Code", "County Name", "County Code", "CPC Grid Code", "Interval Code", "Premium Rate",
+                        "County Base Value", "Subsidy Level", "Maximum Interval Percent", "CPC Rainfall Index", "CPC Interval Rainfall",
+                        "CPC Interval Historical Average Rainfall"]
+
+                filename = f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv"
+
+                # Check if the file exists
+                if os.path.exists(filename):
+                    # If the file exists, read the first line and check if it matches the headers
+                    with open(filename, 'r') as f:
+                        reader = csv.reader(f)
+                        first_line = next(reader)
+                        if first_line != headers:
+                            # If the first line doesn't match the headers, read the rest of the file
+                            rest_of_file = list(reader)
+                            # Then write the headers and the rest of the file
+                            with open(filename, 'w', newline='') as f:
+                                writer = csv.writer(f)
+                                writer.writerow(headers)
+                                writer.writerows(rest_of_file)
+                else:
+                    # If the file doesn't exist, write the headers
+                    with open(filename, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(headers)
+
+                if os.path.isfile(filename):
+                    df = pd.read_csv(filename)
+                    if df.empty:
+                        last_county = ""
+                    else:
+                        last_county = df["County Name"].iloc[-1]
+                        if last_county == counties[-1]["Name"]:
+                            print("Skipping...")
+                            continue
 
                 skip = False
                 if last_county != "":
@@ -169,13 +198,12 @@ for coverage_level in range(70, 95, 5):
                         print("Grid", grid_code)
                         rates = get_rates(state_code, state_name, county_code, county_name, grid_code, year, irrigationTypes[irrigationType], coverage_level)
                         data += rates
-
+                    
                     rates_df = pd.DataFrame(data)
-                    rates_df = rates_df[["State Name", "State Code", "County Name", "County Code", "CPC Grid Code", "Interval Code", "Premium Rate",
-                                        "County Base Value", "Subsidy Level", "Maximum Interval Percent", "CPC Rainfall Index", "CPC Interval Rainfall",
-                                        "CPC Interval Historical Average Rainfall"
-                    ]]
-                    rates_df.to_csv(f"./{state_name}-{year}-{irrigationType}-{coverage_level}-rates.csv", mode='a', header=False, index=False)
+
+                    # Now append the data to the file
+                    rates_df = rates_df[headers]
+                    rates_df.to_csv(filename, mode='a', header=False, index=False)
             except Exception as e:
                 print(f"Error occurred: {e}")
                 print("Year", year)
