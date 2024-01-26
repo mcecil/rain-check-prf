@@ -217,5 +217,8 @@ for coverage_level in range(70, 95, 5):
                 print("Sleeping for 5 minutes...")
                 time.sleep(300)
 
+if len(errors) == 0:
+    send_discord_alert("Successfully completed extracting rates!")
+
 print("Errors")
 print(errors)
