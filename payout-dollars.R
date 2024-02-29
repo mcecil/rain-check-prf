@@ -10,16 +10,16 @@ path <- "/Users/ram/Documents/Projects/VT/prf-ri"
 texas_county <- readOGR(file.path(path, "Texas_County_Boundaries"), "County")
 
 # Read Texas county codes
-county_codes_df <- read.csv(file.path(path, "./county-codes.csv"), stringsAsFactors = FALSE)
+county_codes_df <- read.csv(file.path(path, "./counties/texas/county-codes.csv"), stringsAsFactors = FALSE)
 
 # Add county codes to Spatial dataframe
 texas_county <- merge(texas_county, county_codes_df, by.x = "OBJECTID", by.y = "id")
 
-payout_df <- read.csv(file.path(path, "./payouts/2021-payouts.csv"), stringsAsFactors = FALSE)
+payout_df <- read.csv(file.path(path, "./payouts/texas/2021-payouts.csv"), stringsAsFactors = FALSE)
 
 # Payout Difference by county
 payout_difference_by_county <- payout_df %>%
-  mutate(difference = CPC_indemnity_payout - CHIRPS_indemnity_payout) %>%
+  mutate(difference = CPC_indemnity - CHIRPS_indemnity) %>%
   group_by(county_code) %>%
   summarise(total_difference = sum(difference)) %>%
   arrange(desc(total_difference))
@@ -36,12 +36,12 @@ payout_difference_map <- tm_shape(texas_county_differences) +
   tm_layout(frame = FALSE)
 
 payout_difference_map
-tmap_save(payout_difference_map, filename = file.path(path, "payout-differences.png"))
+# tmap_save(payout_difference_map, filename = file.path(path, "payout-differences.png"))
 
 # # Total CPC indemnity payout by county
 # total_CPC_indemnity_by_county <- payout_df %>%
 #   group_by(county_code) %>%
-#   summarise(total_CPC_payout = sum(CPC_indemnity_payout)) %>%
+#   summarise(total_CPC_payout = sum(CPC_indemnity)) %>%
 #   arrange(desc(total_CPC_payout))
 # total_CPC_indemnity_by_county
 # 
@@ -59,7 +59,7 @@ tmap_save(payout_difference_map, filename = file.path(path, "payout-differences.
 # # Total CHIRPS indemnity payout by county
 # total_CHIRPS_indemnity_by_county <- payout_df %>%
 #   group_by(county_name) %>%
-#   summarise(total_CHIRPS_payout = sum(CHIRPS_indemnity_payout)) %>%
+#   summarise(total_CHIRPS_payout = sum(CHIRPS_indemnity)) %>%
 #   arrange(desc(total_CHIRPS_payout))
 # total_CHIRPS_indemnity_by_county
 # texas_county_CHIRPS_indemnity <-  merge(texas_county, total_CHIRPS_indemnity_by_county)
