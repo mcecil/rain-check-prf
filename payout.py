@@ -660,7 +660,7 @@ intended_use_coverage_level_mapping = {
 
 
 def get_state_name(state_code):
-    with open("./states.json", encoding="utf-8") as file:
+    with open("./state-data/states.json", encoding="utf-8") as file:
         state_data = json.load(file)
     return state_data[str(state_code)]["name"]
 
