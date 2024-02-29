@@ -188,7 +188,9 @@ def get_indices(year, grid_code, interval_codes, state_name):
 def get_CPC_grid_proportions(state, county_code, grid_code):
     state_code = state["state_code"]
     state_name = state["state_name"]
-    grid_df = pd.read_csv(f"./counties/{state_name.lower()}/areas/cpc-county-areas.csv")
+    grid_df = pd.read_csv(
+        f"./state-data/{state_name.lower()}/areas/cpc-county-areas.csv"
+    )
     grid_df = grid_df[
         (grid_df["State Code"] == state_code)
         & (grid_df["County Code"] == county_code)
@@ -201,7 +203,7 @@ def get_CHIRPS_grid_proportions(state, county_code, grid_code):
     state_code = state["state_code"]
     state_name = state["state_name"]
     CHIRPS_county_df = pd.read_csv(
-        f"./counties/{state_name.lower()}/areas/chirps-county-areas.csv"
+        f"./state-data/{state_name.lower()}/areas/chirps-county-areas.csv"
     )
     CHIRPS_county_df = CHIRPS_county_df[
         (CHIRPS_county_df["State Code"] == state_code)
@@ -213,7 +215,7 @@ def get_CHIRPS_grid_proportions(state, county_code, grid_code):
     proportions = CHIRPS_county_df["Proportion"].to_list()
 
     CPC_county_df = pd.read_csv(
-        f"./counties/{state_name.lower()}/areas/cpc-county-areas.csv"
+        f"./state-data/{state_name.lower()}/areas/cpc-county-areas.csv"
     )
     county_area = CPC_county_df[
         (CPC_county_df["State Code"] == state_code)
@@ -504,7 +506,7 @@ def calculate_payout(year, state, county, productivity_factor):
 
 def get_counties(state_name):
     with open(
-        f"./counties/{state_name.lower()}/counties.json", encoding="utf-8"
+        f"./state-data/{state_name.lower()}/counties.json", encoding="utf-8"
     ) as file:
         county_data = json.load(file)
     return county_data

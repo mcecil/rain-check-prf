@@ -7,10 +7,10 @@ library(tmap)
 path <- "/Users/ram/Documents/Projects/VT/prf-ri"
 
 # Read Texas county boundaries shapefile 
-texas_county <- readOGR(file.path(path, "Texas_County_Boundaries"), "County")
+texas_county <- readOGR(file.path(path, "./state-data/texas/county-boundary"), "County")
 
 # Read Texas county codes
-county_codes_df <- read.csv(file.path(path, "./counties/texas/county-codes.csv"), stringsAsFactors = FALSE)
+county_codes_df <- read.csv(file.path(path, "./state-data/texas/county-codes.csv"), stringsAsFactors = FALSE)
 
 # Add county codes to Spatial dataframe
 texas_county <- merge(texas_county, county_codes_df, by.x = "OBJECTID", by.y = "id")
