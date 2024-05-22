@@ -127,7 +127,7 @@ mapping = {
 
 errors= []
 for coverage_level in range(70, 95, 5):
-    for year in range(2007, 2022):
+    for year in range(2023, 2024):
         irrigationType = mapping[coverage_level]
 
         for state_name, state_code in states.items():
