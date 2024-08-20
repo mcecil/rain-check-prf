@@ -28,6 +28,13 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - Historic CPC index values are available [here](https://pubfs-rma.fpac.usda.gov/pub/Miscellaneous_Files/VI_RI_Data/index.html) in files like "Rainfall_Index_HistoricData2022CY.txt". However it is not clear how the index is calculated. For example, the index values for grid 15414, year 2010, interval 627 are slightly different in the "2020CY" (index value 3.483) and "2020CY" (index value 3.366)  files, indicating that a different baseline is used.
 
+- Summary of business data is available [here](https://www.rma.usda.gov/Information-Tools/Summary-of-Business/State-County-Crop-Summary-of-Business). We use the type/practice/unit files like "SOBSCCTPU21.TXT".
+	The files contain historical details about the payouts, premium paid, area covered, total liability, etc., on a county level.
+
+- Premium and county base value rates are downloaded from the USDA RMA API using the "extract-rates.py" script. The script extracts the data for all the counties for a given state for all the intended uses (5) and all the coverage levels (5) across the years 2007-2021 (15). Data are saved to "Colorado-2023-grazing-70-rates.csv". Rates vary based on grid cell, interval, and year. I believe the index threshold (e.g. 0.70 or 70) affects the "Premium Rate" column and the irrigation/organic type (e.g. "grazing", "haying irrigated", "haying-non-irrigated-non-organic" etc) affects the "County Base Value" column.  Data has been extracted for TX, VA, CO so far. 
+
+## Data augmentation
+
   
 
 
