@@ -20,7 +20,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - [GEE script](https://code.earthengine.google.com/bb14c742606a6e78d2394e2b79022fb2) to calculate CPC grid areas. Outputs are files like "county-areas-anomaly.csv" that contain a column "Proportion" that is the proportion of the county represented by each CPC grid (sums to 1 for each county).
 
-- [GEE script](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) for CHIRPS grid areas. Similar to above, but using CHIRPS grids. Outputs are files like " chirps-county-areas.csv, with columns "Total Area" representing the area of the CPC grid cell within the county, and "Area" representing the area of the CHIRPS pixel within that CPC area (so sum of "Area" should equal "Total Area" for each CPC grid cell.
+- [GEE script](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) for CHIRPS grid areas. Similar to above, but using CHIRPS grids. Outputs are files like " chirps-county-areas.csv, with columns "Total Area" representing the area of the CPC grid cell within the county, and "Area" representing the area of the CHIRPS pixel within that CPC area (so sum of "Area" should equal "Total Area" for each CPC grid cell. There is a subsequent script "get-chirps-proportions.py" that adds a column for the proportion of each CPC pixel. 
 
 ## Additional data collection
 
@@ -43,6 +43,6 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - We calculate the CHIRPS index values using the script "generate-chirps-index.py". This script takes as input the files like "grid-10019.csv" containing CHIRPS precip values and the "cpc-map.json" file containing CPC precip values. The output are files like "grid-10019.csv" containing additional columns for CHIRPS precip data, and saved in the "precipitation-transformed" folder. **the logic generally makes sense but this script needs to be rewritten for the different CPC and CHIRPS data sources**
 
-- 
+- Calculate CHIRPS grid proportions using "get-chirps-proportions.py". 
 
 
