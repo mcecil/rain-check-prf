@@ -26,15 +26,19 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - Historic CPC raw values can be downloaded using the archived [rnoaa package](https://github.com/ropensci/rnoaa). The script "download_cpc.R" downloads CPC data at a daily timestep for all grids, and saves values to a .csv file for each day (e.g. "cpc_2022-12-31.csv"). The script "group_month_cpc.R" groups CPC data into 2-month intervals, calculates interval sum precip for 1948-2022, and calculates CPC index values (current year precip divided by average precip from 1948 to (current year - 2)).
 
-- Historic CPC index values are available [here](https://pubfs-rma.fpac.usda.gov/pub/Miscellaneous_Files/VI_RI_Data/index.html) in files like "Rainfall_Index_HistoricData2022CY.txt". However it is not clear how the index is calculated. For example, the index values for grid 15414, year 2010, interval 627 are slightly different in the "2020CY" (index value 3.483) and "2020CY" (index value 3.366)  files, indicating that a different baseline is used.
+- The downloaded daily CPC vlaues are then processed into interval precipitation and interval index values in "group_month_cpc_na_rm.R". The output table is "monthly_averages_na_rm.csv". For the time-being, NA values are discarded and treated as 0 precipitation. (there are only a handful of such values).
+
+- The script "join_grid_cpc.R" is used to join CPC index values to the grid polygons for mapping.
+
+- Historic CPC index values are also available [here](https://pubfs-rma.fpac.usda.gov/pub/Miscellaneous_Files/VI_RI_Data/index.html) in files like "Rainfall_Index_HistoricData2022CY.txt". However it is not clear how the index is calculated. For example, the index values for grid 15414, year 2010, interval 627 are slightly different in the "2020CY" (index value 3.483) and "2020CY" (index value 3.366)  files, indicating that a different baseline is used.
 
 - Summary of business data is available [here](https://www.rma.usda.gov/Information-Tools/Summary-of-Business/State-County-Crop-Summary-of-Business). We use the type/practice/unit files like "SOBSCCTPU21.TXT".
 	The files contain historical details about the payouts, premium paid, area covered, total liability, etc., on a county level.
 
-- Premium and county base value rates are downloaded from the USDA RMA API using the "extract-rates.py" script. The script extracts the data for all the counties for a given state for all the intended uses (5) and all the coverage levels (5) across the years 2007-2021 (15). Data are saved to "Colorado-2023-grazing-70-rates.csv". Rates vary based on grid cell, interval, and year. I believe the index threshold (e.g. 0.70 or 70) affects the "Premium Rate" column and the irrigation/organic type (e.g. "grazing", "haying irrigated", "haying-non-irrigated-non-organic" etc) affects the "County Base Value" column.  Data has been extracted for TX, VA, CO so far. 
+- Premium and county base value rates are downloaded from the USDA RMA API using the "extract-rates.py" script. The script extracts the data for all the counties for a given state for all the intended uses (5) and all the coverage levels (5) across the years 2007-2021 (15). Data are saved to "Colorado-2023-grazing-70-rates.csv". Rates vary based on grid cell, interval, and year. I believe the index threshold (e.g. 0.70 or 70) affects the "Premium Rate" column and the irrigation/organic type (e.g. "grazing", "haying irrigated", "haying-non-irrigated-non-organic" etc) affects the "County Base Value" column.  Data has been extracted for TX, VA, CO so far. **Currently the RMA API is not working so we are using already downloaded values for rates and CBV**.
 
 ## Data augmentation
 
-  
+- 
 
 
