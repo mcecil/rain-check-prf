@@ -41,6 +41,8 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
   
 - The script "generate-cpc-map.py" creates a .json file for faster lookup of CPC downloaded index values for grid-interval-year combinations. We could also create this for the CPC calculated index values. The output is saved to "cpc-map.json"
 
-- We calculate the CHIRPS index values using the script "generate-chirps-index.py".
+- We calculate the CHIRPS index values using the script "generate-chirps-index.py". This script takes as input the files like "grid-10019.csv" containing CHIRPS precip values and the "cpc-map.json" file containing CPC precip values. The output are files like "grid-10019.csv" containing additional columns for CHIRPS precip data, and saved in the "precipitation-transformed" folder. **the logic generally makes sense but this script needs to be rewritten for the different CPC and CHIRPS data sources**
+
+- 
 
 
