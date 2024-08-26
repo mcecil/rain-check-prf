@@ -43,6 +43,11 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - We calculate the CHIRPS index values using the script "generate-chirps-index.py". This script takes as input the files like "grid-10019.csv" containing CHIRPS precip values and the "cpc-map.json" file containing CPC precip values. The output are files like "grid-10019.csv" containing additional columns for CHIRPS precip data, and saved in the "precipitation-transformed" folder. **the logic generally makes sense but this script needs to be rewritten for the different CPC and CHIRPS data sources**
 
-- Calculate CHIRPS grid proportions using "get-chirps-proportions.py". 
+- Calculate CHIRPS grid proportions using "get-chirps-proportions.py".
+
+## Payout and analysis
+
+- "payout.py"
+
 
 
