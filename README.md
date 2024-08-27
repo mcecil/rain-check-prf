@@ -47,7 +47,11 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 ## Payout and analysis
 
-- "payout.py"
+- "payout.py" . Loops through years, and counties in state. Extend adds multiple elements to list. calls "calculate_payout", based on year, interval, state, county, and productivity factor. looks up intervals, total acres, subsidy level based on year, state, county code. gets list of CPC grids based on county. gets rates, CPC indices, CPC/CHIRPS proportions based on county.
+- 
+- loops over items from SOB, based on coverage level and area. this is county level, so I think it assumes each observation in a county is equally weighted across all CPC/CHIRPS grids in the county (based on proportion). it calculates CPC and CHIRPS payout for this, which includes information (from SOB) on premium, indemnity, liability
+
+- outputs include: 
 
 
 
