@@ -54,5 +54,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
   - Looks like some slight errors in column names in the code. columns are named "CPC_indemnity_payout" but then the code calls "CPC_indemnity" which results in the colummns not being filled in the output. need to update. 
   - need to look into how this chooses intervals from SOB. it looks like it iterates through the SOB data based on year and county and extracts the first two non-overlapping intervals (based on "Practice Code" field. do we know if the SOB data is sorted by area? . note - it does not appear the two most common intervals. I tested for 2011, Texas, Falls County, and the Mar-April interval (627) seems most common (both for haying and grazing), but the interals selected are 625 and 635.
 
+- "generate-deviation-count.py"
+
 
 
