@@ -49,8 +49,10 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - "payout.py" . Loops through years, and counties in state. Extend adds multiple elements to list. calls "calculate_payout", based on year, interval, state, county, and productivity factor. looks up intervals, total acres, subsidy level based on year, state, county code. gets list of CPC grids based on county. gets rates, CPC indices, CPC/CHIRPS proportions based on county.
   - loops over items from SOB, based on coverage level and area. this is county level, so I think it assumes each observation in a county is equally weighted across all CPC/CHIRPS grids in the county (based on proportion). it calculates CPC and CHIRPS payout for this, which includes information (from SOB) on premium, indemnity, liability
-  - inputs include: 
-  - outputs include: 
+  - inputs files outlined well in Ram's explanation. include: summary of business (TPU files), rates info (from RMA API), grids info (I think from "transformed" folder with CHIRPS indices), counties, CHIRPS and CPC proportions.
+  - outputs are files like "2011-payouts.csv", that contain one row for each coverage level (e.g. 70, 85, 90) in a county (likely each coverage level that appears in the SOB file). the file contains info on premium (total, subsidy, actual), indemnity and liability. I'm not 100% clear on why the premium and liability differ between CPC and CHIRPS (they are close but slightly different). Is this due to the area used to calculate each? The "area" field is calculated from the sum of all area in the TPU files for the county (both haying and grazing) for the specified coverage level (70 etc)
+  - Looks like some slight errors in column names in the code. columns are named "CPC_indemnity_payout" but then the code calls "CPC_indemnity" which results in the colummns not being filled in the output. need to update. 
+  - need to look into how this chooses intervals from SOB. it looks like it iterates through the SOB data based on year and county and extracts the first two non-overlapping intervals (based on "Practice Code" field. do we know if the SOB data is sorted by area? . note - it does not appear the two most common intervals. I tested for 2011, Texas, Falls County, and the Mar-April interval (627) seems most common (both for haying and grazing), but the interals selected are 625 and 635.
 
 
 
