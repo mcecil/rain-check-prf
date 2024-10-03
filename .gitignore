@@ -1,7 +1,6 @@
 env
 .ipynb_checkpoints
 node_modules
-data
 summary-of-business
 rates
 chirps_env
@@ -14,3 +13,8 @@ deviation
 payouts-*
 payouts
 state-data
+OLD
+data
+data/outputs/monthly_averages_na_rm.csv
+data/PRF_sob/raw_files
+.Rproj.user
