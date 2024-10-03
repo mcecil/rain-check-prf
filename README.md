@@ -62,7 +62,15 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - "group_month_cpc_na_rm.R" processes the daily CPC rainfall data (downloaded with "download_CPC.R") into a usable format, calculating monthly and 2-month interval precipitation, and full and 30-year index values for each CPC grid cell. The output file is "monthly_averages.csv". Note that NA values are treated as 0. They are infrequent, but this could be adjusted in the future.
 
-- cpc_baseline_plot_single.R" creates an output plot showing the different RI calculations for the full and 30 year baseline for a selected grid cell and interval (for year 2022). 
+- "cpc_baseline_plot_single.R" creates an output plot showing the different RI calculations for the full and 30 year baseline for a selected grid cell and interval (for year 2022).
+
+- "cpc_baseline_plot.R" creates plots for all grid cells (and selected intervals) in a selected county. This county is currently set to Brewster, TX.
+
+- "chirps_tx.R" creates a 3-panel plot showing CHIRPS raw and aggregated precip for Brewster county TX. The CHIRPS files are named like "CHIRPS_precip_TX_1981_625.csv" and are downloaded with the notebook "PRF-RI_CPC_CHIRPS.ipynb". It also outputs a map of Brewster county that is merged with the plot in powerpoint. 
+
+- "prf_sob.R" creates a simple two panel plot of acreage growth in PRF and non-PRF programs, and the yearly cost ratio for PRF.
+
+- "weather_station_density.R" reads a .tsv file of CPC weather station locations (from [here](https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/.UNIFIED_PRCP/.GAUGE_BASED/.CONUS/.v1p0/.RETRO/). These files are listed in lon lat table, but for each day from 1948-2006. We extract the table for the first and last day in the range. Later weather station dates are available [here](https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/.UNIFIED_PRCP/.GAUGE_BASED/.CONUS/.v1p0/.REALTIME/)
 
 
 
