@@ -54,8 +54,16 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
   - Looks like some slight errors in column names in the code. columns are named "CPC_indemnity_payout" but then the code calls "CPC_indemnity" which results in the colummns not being filled in the output. need to update. 
   - need to look into how this chooses intervals from SOB. it looks like it iterates through the SOB data based on year and county and extracts the first two non-overlapping intervals (based on "Practice Code" field. do we know if the SOB data is sorted by area? . note - it does not appear the two most common intervals. I tested for 2011, Texas, Falls County, and the Mar-April interval (627) seems most common (both for haying and grazing), but the interals selected are 625 and 635.
 
-- "generate-deviation-count.py". I don't think this has been run yet. The output file is something like "deviation-count-2011.csv", it contains info on CHIRPS and CPC payout count (at the CHIRPS resolution) and a deviation count for when they differ. 
+- "generate-deviation-count.py". I don't think this has been run yet. The output file is something like "deviation-count-2011.csv", it contains info on CHIRPS and CPC payout count (at the CHIRPS resolution) and a deviation count for when they differ.
 
 - "generate-variation.py". Output is "precipitation-coeff-var.csv". Essentially it finds the cv of CHIRPS precip values in a given grid, year, and interval (25 total obs). 
+
+## Initial figure creation
+
+- "group_month_cpc_na_rm.R" processes the daily CPC rainfall data (downloaded with "download_CPC.R") into a usable format, calculating monthly and 2-month interval precipitation, and full and 30-year index values for each CPC grid cell. The output file is "monthly_averages.csv". Note that NA values are treated as 0. They are infrequent, but this could be adjusted in the future.
+
+- cpc_baseline_plot_single.R" creates an output plot showing the different RI calculations for the full and 30 year baseline for a selected grid cell and interval (for year 2022). 
+
+
 
 
