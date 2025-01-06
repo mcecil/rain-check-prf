@@ -1,14 +1,15 @@
 library(devtools)
-# install_github("ropensci/rnoaa")
+install_github("ropensci/rnoaa")
 # install.packages('vctrs')
 # install.packages('tidyverse')
 library(rnoaa)
 library(sf)
 library(tidyverse) # For data manipulation
 library(lubridate)
+library(here)
 
-start_date <- ymd("1966-12-10")
-end_date <- ymd("2022-12-31")
+start_date <- ymd("1948-01-01")
+end_date <- ymd("2023-12-31")
 
 date_seq <- format(seq(start_date, end_date, by = "day"),
                    "%Y-%m-%d")
@@ -17,7 +18,7 @@ date_seq <- format(seq(start_date, end_date, by = "day"),
 for (date in date_seq) {
   # Perform operations on each date
   cpc_data <- cpc_prcp(as.character(date), us = TRUE)
-  write.csv(cpc_data, file = paste0("/Users/mcecil/prfri/cpc_downloads/cpc_", date, ".csv"))
+  write.csv(cpc_data, file = here(paste0("data/cpc_downloads/cpc_", date, ".csv")))
 }
 
 

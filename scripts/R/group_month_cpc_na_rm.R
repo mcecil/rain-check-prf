@@ -3,7 +3,7 @@ library(lubridate)
 library(stringr)
 library(here)
 
-cpc_download_folder <- "/Users/mjcecil/Downloads/cpc_downloads"
+cpc_download_folder <- here("data/cpc_downloads")
 
 # Function to process a single file
 process_monthly_files <- function(files) {
@@ -71,7 +71,7 @@ monthly_averages <- replace_dots_in_colnames(monthly_averages)
 #monthly_averages <- monthly_averages %>% filter(lon == 258.375) %>% filter(lat == 32.875)
 
 ## calculate interval precipitation
-for(year in 1948:2022){
+for(year in 1948:2023){
   for(month in 1:11){
     current_interval <- month + 624
     monthly_averages[[paste0("precip_",
@@ -89,7 +89,7 @@ for(year in 1948:2022){
 
 
 
-for(year in 2000:2022){
+for(year in 2000:2023){
   print(year)
   for(interval in 625:635){
     current_year_precip <- monthly_averages[[paste0("precip_",
@@ -246,7 +246,7 @@ valid_grids$lon <- valid_grids$lon - 360
 #                colour = 'red', lty = 'dashed') +
 #   geom_point(x = 2022, y = single_grid_df[[paste0("precip_2022-", interval)]], size = 3) +
 #   theme_bw() +
-# #  ggtitle(paste0("Jan Feb precip for grid ID ", grid_id)) +
+# #  ggtitle(paste0("Jan   precip for grid ID ", grid_id)) +
 #   ggtitle(paste0("1948-2022 Mar-Apr precip, grid ID ", grid_id)) +
 #   xlab("") +
 #   xlim(1948, 2025) +
