@@ -33,21 +33,21 @@ for (date in date_seq) {
 
 
 
-
-a <- cpc_prcp("1949-01-01", us = TRUE)
-write.csv(a, file = 'CPC.csv')
-df_spatial <- st_as_sf(a, coords = c("lon", "lat"), crs = 4326)
-
-
-for cpc_date in
-tx <- st_read("/Users/mcecil/Downloads/tl_2016_48_cousub/tl_2016_48_cousub.shp")
-
-tx_rpj <- st_transform(tx, st_crs(df_spatial))
-
-df_spatial_in_texas <- st_intersects(df_spatial, tx_rpj)
-num_points_in_texas <- sum(df_spatial_in_texas > 0)
-
-count_non_zero_sgbp <- function(sgbp) {
-  sum(lengths(sgbp))
-}
-count_non_zero_sgbp(df_spatial_in_texas)
+# 
+# a <- cpc_prcp("1949-01-01", us = TRUE)
+# write.csv(a, file = 'CPC.csv')
+# df_spatial <- st_as_sf(a, coords = c("lon", "lat"), crs = 4326)
+# 
+# 
+# for cpc_date in
+# tx <- st_read("/Users/mcecil/Downloads/tl_2016_48_cousub/tl_2016_48_cousub.shp")
+# 
+# tx_rpj <- st_transform(tx, st_crs(df_spatial))
+# 
+# df_spatial_in_texas <- st_intersects(df_spatial, tx_rpj)
+# num_points_in_texas <- sum(df_spatial_in_texas > 0)
+# 
+# count_non_zero_sgbp <- function(sgbp) {
+#   sum(lengths(sgbp))
+# }
+# count_non_zero_sgbp(df_spatial_in_texas)

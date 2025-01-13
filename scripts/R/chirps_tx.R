@@ -6,7 +6,7 @@ library(scico)
 library(sf)
 library(here)
 
-tx_chirps_files_folder <- "/Users/mjcecil/Downloads/PRF-RI"
+tx_chirps_files_folder <- here("data/PRF-RI_CHIRPS")
 
 clean_chart_clutter_explore <- 
   theme(    
@@ -151,7 +151,7 @@ tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry
 crs(d_chirps_2023_627) <- "+proj=longlat +datum=WGS84 +nodefs"
 tx_counties <- st_transform(tx_counties, crs(d_chirps_2023_627))
 brewster <- tx_counties %>% filter(NAME == "Brewster County")
-cpc_grids <- st_read("/Users/mjcecil/Downloads/prfri/rainfall_index_grids/official_RMA_RI_grid.shp") %>% 
+cpc_grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp")) %>% 
   st_transform(., st_crs(d_chirps_2023_627))
 brewster_grids <- st_crop(cpc_grids, brewster)
 

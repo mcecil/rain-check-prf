@@ -1,0 +1,2204 @@
+---
+title: "ARER workflow"
+author: Michael Cecil
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+
+## need to functionize below, then loop for all years, then calculate CHIRPS indices
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+ViewWithCommas <- function(df) {
+  df_formatted <- df
+  # Format numeric columns with commas
+  numeric_cols <- sapply(df_formatted, is.numeric)
+  df_formatted[numeric_cols] <- lapply(df_formatted[numeric_cols], comma)
+  View(df_formatted)
+}
+```
+
+
+# PLOTS BELOW (in progress)
+
+## East vs West Texas classification
+
+```{r}
+tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+tx_counties <- st_set_crs(tx_counties, 4326)  # Example: EPSG 4326 (WGS84)
+  
+koppen_grid <- raster(here("data/koppen-climate-classification/koppen_ics/w001001.adf"))
+
+tx_counties_rpj <- st_transform(tx_counties, crs = crs(koppen_grid))
+
+## get unique classifications in TX
+summary_stats <- exact_extract(koppen_grid, tx_counties_rpj %>% st_union(), function(values, coverage_fraction) {
+    table(values)
+}, progress = TRUE)
+
+## 1 value is for "B" classifications (arid) 
+## 2 value is for "C" classification (temperate)
+koppen_dict <- c("7" = 1, "8" = 1, "15" = 2, 18 = 2, 22 = 2, 23 = 2)
+reclass_df <- data.frame(c(7, 8, 15, 18, 22, 23),
+                         c(1, 1, 2, 2, 2, 2))
+koppen_grid_rcl <- reclassify(koppen_grid, rcl = as.matrix(reclass_df))
+
+## extract values for TX counties
+summary_stats_rcl <- exact_extract(
+    koppen_grid_rcl,
+    tx_counties_rpj,
+    function(values, coverage_fraction) {
+        tbl <- table(values)
+        as.numeric(names(tbl)[which.max(tbl)])
+    },
+    progress = TRUE
+)
+
+tx_counties_rpj$region <- summary_stats_rcl
+
+east_tx_county_codes <- tx_counties %>% filter(region == 2) %>% pull(COUNTYID) %>% as.numeric()
+west_tx_county_codes <- tx_counties %>% filter(region == 1) %>% pull(COUNTYID) %>% as.numeric()
+
+plot(tx_counties_rpj['region'])
+
+```
+
+
+
+```{r}
+
+## for CPC grids
+
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+# monthly_averages_merge <- merge(grids, monthly_averages,
+#                           by = c("lon", "lat"))
+
+
+
+## filter to TX grid cells
+year <- 2023
+tx_grid_ids <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"), full.names = T) %>%
+  first() %>% read.csv() %>% pull(GRIDCODE) %>% unique()
+
+tx_grids <- grids %>% filter(GRIDCODE %in% tx_grid_ids)
+plot(tx_grids)
+
+tx_grids_rpj <- st_transform(tx_grids, crs(koppen_grid))
+
+## get unique classifications in TX grids
+summary_stats <- exact_extract(koppen_grid, tx_grids_rpj %>% st_union(), function(values, coverage_fraction) {
+    table(values)
+}, progress = TRUE)
+
+reclass_df <- data.frame(c(7, 8, 15, 18, 19,  22, 23),
+                         c(1, 1, 2, 2, 2, 2, 2))
+koppen_grid_rcl <- reclassify(koppen_grid, rcl = as.matrix(reclass_df))
+
+## extract values for TX grids
+summary_stats_rcl <- exact_extract(
+    koppen_grid_rcl,
+    tx_grids_rpj,
+    function(values, coverage_fraction) {
+        tbl <- table(values)
+        as.numeric(names(tbl)[which.max(tbl)])[1]
+    },
+    progress = TRUE
+)
+
+tx_grids_rpj$region <- summary_stats_rcl
+tx_grids_rpj[tx_grids_rpj$GRIDCODE == 9719, "region"] <- 1
+tx_grids_rpj[tx_grids_rpj$GRIDCODE %in%  c(7932, 8832, 9433), "region"] <- 2
+
+plot(tx_grids_rpj["region"])
+
+
+```
+
+
+## Summary stats
+
+### comparison of average historical precip (1981-2010) to active program precip (2012-2023)
+
+```{r}
+
+load(here("data/outputs/chirps_data_TX_ri.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+
+chirps_data <- merge(chirps_data, tx_grids_rpj %>% select(GRIDCODE, region),
+                     by = "GRIDCODE") 
+
+
+# Example data frame
+# Assuming chirps_data is your data frame
+
+# Define suffixes to match
+suffixes <- c("625", "627", "629", "631", "633", "635")
+
+# Loop through the years and create new columns 
+for (year in 1981:2023) {
+  print(year)
+  # Construct pattern to match columns for the specific year
+  pattern <- paste0("CHIRPS_precip_", year, "_(", paste(suffixes, collapse = "|"), ")$")
+  
+  # Select relevant columns
+  matching_cols <- grep(pattern, names(chirps_data), value = TRUE)
+  print(matching_cols)
+  # Sum the columns and add the new column
+  chirps_data[[paste0("CHIRPS_precip_", year)]] <- rowSums(chirps_data[, matching_cols], na.rm = TRUE)
+}
+
+for (year in 1981:2023) {
+  print(year)
+  # Construct pattern to match columns for the specific year
+  pattern <- paste0("^precip_", year, ".(", paste(suffixes, collapse = "|"), ")$")
+  
+  # Select relevant columns
+  matching_cols <- grep(pattern, names(chirps_data), value = TRUE)
+  print(matching_cols)
+  # Sum the columns and add the new column
+  chirps_data[[paste0("CPC_precip_", year)]] <- rowSums(chirps_data[, matching_cols], na.rm = TRUE)
+}
+
+# West TX plot
+
+
+# Filter columns for years of interest
+yearly_precip_cols <- grep("^CHIRPS_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape data to long format
+chirps_long <- chirps_data %>%
+  filter(region == 1) %>% 
+  select(all_of(yearly_precip_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CHIRPS_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+
+# Calculate averages for the two periods
+averages <- chirps_long %>%
+  filter(year %in% c(1981:2010, 2012:2023)) %>%
+  group_by(period = case_when(
+    year >= 1981 & year <= 2010 ~ "1981–2010",
+    year >= 2012 & year <= 2023 ~ "2012–2023",
+    TRUE ~ NA_character_
+  )) %>%
+  summarize(
+    avg_precip = mean(precip, na.rm = TRUE),
+    x_start = min(year),
+    x_end = max(year),
+    .groups = "drop"
+  )
+
+chirps_long[chirps_long$year == 2011, "precip"] <- NA
+
+
+
+# Plot yearly precipitation and averages
+ggplot(chirps_long , aes(x = year, y = precip)) +
+  geom_line(color = "blue", size = 1) +  # Yearly precipitation
+  geom_segment(
+    data = averages,
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period),
+    color = "red", size = 1
+  ) +
+  scale_linetype_manual(
+    values = c("1981–2010" = "dashed", "2012–2023" = "dashed"),
+    name = "Period"
+  ) +
+  labs(
+    title = "West TX Yearly Precipitation with Period Averages",
+    x = "Year",
+    y = "Precipitation (mm)"
+  ) +
+  theme_minimal()
+
+
+
+```
+
+```{r}
+
+load(here("data/outputs/chirps_data_TX_ri.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+chirps_data <- merge(chirps_data, tx_grids_rpj %>% select(GRIDCODE, region),
+                     by = "GRIDCODE") 
+
+
+# Example data frame
+# Assuming chirps_data is your data frame
+
+# Define suffixes to match
+suffixes <- c("625", "627", "629", "631", "633", "635")
+
+# Loop through the years and create new columns 
+for (year in 1981:2023) {
+  # Construct pattern to match columns for the specific year
+  pattern <- paste0("CHIRPS_precip_", year, "_(", paste(suffixes, collapse = "|"), ")$")
+  
+  # Select relevant columns
+  matching_cols <- grep(pattern, names(chirps_data), value = TRUE)
+  
+  # Sum the columns and add the new column
+  chirps_data[[paste0("CHIRPS_precip_", year)]] <- rowSums(chirps_data[, matching_cols], na.rm = TRUE)
+}
+
+for (year in 1981:2023) {
+  # Construct pattern to match columns for the specific year
+  pattern <- paste0("^precip_", year, ".(", paste(suffixes, collapse = "|"), ")$")
+  
+  # Select relevant columns
+  matching_cols <- grep(pattern, names(chirps_data), value = TRUE)
+  
+  # Sum the columns and add the new column
+  chirps_data[[paste0("CPC_precip_", year)]] <- rowSums(chirps_data[, matching_cols], na.rm = TRUE)
+}
+
+```
+
+
+
+```{r}
+
+## East TX
+
+# Filter columns for years of interest for CHIRPS
+yearly_chirps_cols <- grep("^CHIRPS_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CHIRPS data to long format
+chirps_long <- chirps_data %>%
+  filter(region == 2) %>% 
+  select(all_of(yearly_chirps_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CHIRPS_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Filter columns for CPC dataset
+yearly_cpc_cols <- grep("^CPC_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CPC data to long format
+cpc_long <- chirps_data %>%
+  filter(region == 2) %>%
+  select(all_of(yearly_cpc_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CPC_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Combine both CHIRPS and CPC data
+precip_long <- bind_rows(
+  chirps_long %>% mutate(dataset = "CHIRPS"),
+  cpc_long %>% mutate(dataset = "CPC")
+)
+
+# Calculate averages for the two periods
+averages <- precip_long %>%
+  filter(year %in% c(1981:2010, 2012:2023)) %>%
+  group_by(period = case_when(
+    year >= 1981 & year <= 2010 ~ "1981–2010",
+    year >= 2012 & year <= 2023 ~ "2012–2023",
+    TRUE ~ NA_character_
+  ), dataset) %>%
+  summarize(
+    avg_precip = mean(precip, na.rm = TRUE),
+    x_start = min(year),
+    x_end = max(year),
+    .groups = "drop"
+  )
+
+# Plot yearly precipitation for both CHIRPS and CPC data, with averages
+ggplot(precip_long, aes(x = year, y = precip, color = dataset)) +
+  # CHIRPS 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 1981 & year <= 2010),
+            aes(color = "CHIRPS 1981–2010"), size = 1) +  
+  # CHIRPS 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 2012 & year <= 2023),
+            aes(color = "CHIRPS 2012–2023"), size = 1) +  
+  # CPC 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 1981 & year <= 2010),
+            aes(color = "CPC 1981–2010"), size = 1) +  
+  # CPC 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 2012 & year <= 2023),
+            aes(color = "CPC 2012–2023"), size = 1) +  
+  # Averages for each period with correct line colors
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 1981–2010"),
+    size = 1
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 2012–2023"),
+    size = 1
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 1981–2010"),
+    size = 1
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 2012–2023"),
+    size = 1
+  ) +
+  scale_linetype_manual(
+    values = c("1981–2010" = "dashed", "2012–2023" = "dashed"),
+    name = "Period"
+  ) +
+  scale_color_manual(
+    values = c(
+      "CHIRPS 1981–2010" = "orange", 
+      "CHIRPS 2012–2023" = "orange4", 
+      "CPC 1981–2010" = "blue", 
+      "CPC 2012–2023" = "blue4",
+      "1981–2010" = "orange", 
+      "2012–2023" = "orange4"
+    ),
+    name = "Period/Dataset"
+  ) +
+  guides(color = guide_legend(order = 1), linetype = "none") +  # Remove the legend for Period (line type) and keep others
+  labs(
+    title = "East TX Yearly Precipitation with Period Averages",
+    x = "Year",
+    y = "Precipitation (mm)"
+  ) +
+  theme_minimal()
+
+
+
+```
+
+```{r}
+
+
+## West TX
+
+# Filter columns for years of interest for CHIRPS
+yearly_chirps_cols <- grep("^CHIRPS_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CHIRPS data to long format
+chirps_long <- chirps_data %>%
+  filter(region == 1) %>% 
+  select(all_of(yearly_chirps_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CHIRPS_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Filter columns for CPC dataset
+yearly_cpc_cols <- grep("^CPC_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CPC data to long format
+cpc_long <- chirps_data %>%
+  filter(region == 1) %>%
+  select(all_of(yearly_cpc_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CPC_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Combine both CHIRPS and CPC data
+precip_long <- bind_rows(
+  chirps_long %>% mutate(dataset = "CHIRPS"),
+  cpc_long %>% mutate(dataset = "CPC")
+)
+
+# Calculate averages for the two periods
+averages <- precip_long %>%
+  filter(year %in% c(1981:2010, 2012:2023)) %>%
+  group_by(period = case_when(
+    year >= 1981 & year <= 2010 ~ "1981–2010",
+    year >= 2012 & year <= 2023 ~ "2012–2023",
+    TRUE ~ NA_character_
+  ), dataset) %>%
+  summarize(
+    avg_precip = mean(precip, na.rm = TRUE),
+    x_start = min(year),
+    x_end = max(year),
+    .groups = "drop"
+  )
+
+# Plot yearly precipitation for both CHIRPS and CPC data, with averages
+ggplot(precip_long, aes(x = year, y = precip, color = dataset)) +
+  # CHIRPS 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 1981 & year <= 2010),
+            aes(color = "CHIRPS 1981–2010"), size = 1) +  
+  # CHIRPS 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 2012 & year <= 2023),
+            aes(color = "CHIRPS 2012–2023"), size = 1) +  
+  # CPC 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 1981 & year <= 2010),
+            aes(color = "CPC 1981–2010"), size = 1) +  
+  # CPC 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 2012 & year <= 2023),
+            aes(color = "CPC 2012–2023"), size = 1) +  
+  # Averages for each period with correct line colors
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 1981–2010"),
+    size = 1
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 2012–2023"),
+    size = 1
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 1981–2010"),
+    size = 1
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 2012–2023"),
+    size = 1
+  ) +
+  scale_linetype_manual(
+    values = c("1981–2010" = "dashed", "2012–2023" = "dashed"),
+    name = "Period"
+  ) +
+  scale_color_manual(
+    values = c(
+      "CHIRPS 1981–2010" = "orange", 
+      "CHIRPS 2012–2023" = "orange4", 
+      "CPC 1981–2010" = "blue", 
+      "CPC 2012–2023" = "blue4",
+      "1981–2010" = "orange", 
+      "2012–2023" = "orange4"
+    ),
+    name = "Period/Dataset"
+  ) +
+  guides(color = guide_legend(order = 1), linetype = "none") +  # Remove the legend for Period (line type) and keep others
+  labs(
+    title = "West TX Yearly Precipitation with Period Averages",
+    x = "Year",
+    y = "Precipitation (mm)"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+### precip distributions for CPC, CHIRPS
+#### East TX
+
+```{r}
+
+## skipping for now
+
+chirps_data_east <- chirps_data %>% filter(region == 2)
+
+xlim_max = max(c(chirps_data$CHIRPS_precip_2021, chirps_data$CPC_precip_2021))
+
+par(mfrow = c(2,1))
+## East TX 2021
+# Create histogram with density overlay
+hist(chirps_data_east$CHIRPS_precip_2021, 
+     breaks = 30, 
+     probability = TRUE, # For density on y-axis
+     col = rgb(0.2, 0.4, 0.6, 0.5), # Semi-transparent color for histogram
+     main = "East TX CHIRPS precip 2021", 
+     xlab = "mm/yr", 
+     xlim = c(0, xlim_max),
+     border = "white")
+
+# Add density plot
+lines(density(chirps_data_east$CHIRPS_precip_2021), 
+      col = "darkred", 
+      lwd = 2)
+
+
+## East TX 2021
+# Create histogram with density overlay
+hist(chirps_data_east$CPC_precip_2021, 
+     breaks = 30, 
+     probability = TRUE, # For density on y-axis
+     col = rgb(0.2, 0.4, 0.6, 0.5), # Semi-transparent color for histogram
+     main = "East TX CPC precip 2021", 
+     xlab = "mm/yr", 
+     xlim = c(0, xlim_max),
+     border = "white")
+
+# Add density plot
+lines(density(chirps_data_east$CPC_precip_2021), 
+      col = "darkred", 
+      lwd = 2)
+
+
+```
+
+
+
+### precip distributions for CPC, CHIRPS
+#### West TX
+
+```{r}
+
+
+chirps_data_west <- chirps_data %>% filter(region == 1)
+
+xlim_max = max(c(chirps_data$CHIRPS_precip_2021, chirps_data$CPC_precip_2021))
+
+## west TX 2021
+# Create histogram with density overlay
+hist(chirps_data_west$CHIRPS_precip_2021, 
+     breaks = 30, 
+     probability = TRUE, # For density on y-axis
+     col = rgb(0.2, 0.4, 0.6, 0.5), # Semi-transparent color for histogram
+     main = "West TX CHIRPS precip 2021", 
+     xlab = "mm/yr", 
+     xlim = c(0, xlim_max),
+     border = "white")
+
+# Add density plot
+lines(density(chirps_data_west$CHIRPS_precip_2021), 
+      col = "darkred", 
+      lwd = 2)
+
+
+## west TX 2021
+# Create histogram with density overlay
+hist(chirps_data_west$CPC_precip_2021, 
+     breaks = 30, 
+     probability = TRUE, # For density on y-axis
+     col = rgb(0.2, 0.4, 0.6, 0.5), # Semi-transparent color for histogram
+     main = "West TX CPC precip 2021", 
+     xlab = "mm/yr", 
+     xlim = c(0, xlim_max),
+     border = "white")
+
+# Add density plot
+lines(density(chirps_data_west$CPC_precip_2021), 
+      col = "darkred", 
+      lwd = 2)
+
+
+```
+
+
+
+
+
+
+## RI by interval, CHIRPS and CPC
+
+```{r}
+
+## East TX 
+
+
+# Filter relevant columns for CPC index (monthly data)
+monthly_cpc_cols <- grep("^cpc_index_1981_base_\\d{4}_6(2[5-9]|3[0-5])$", names(chirps_data), value = TRUE)
+
+# Reshape the data to long format
+monthly_cpc_long <- chirps_data %>%
+  filter(region == 2) %>% 
+  select(all_of(monthly_cpc_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("year", "month"),
+    names_pattern = "cpc_index_1981_base_(\\d{4})_(\\d{3})",
+    values_to = "value"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    month = as.numeric(month)
+  )
+
+# Filter relevant columns for CHIRPS index (monthly data)
+monthly_chirps_cols <- grep("^CHIRPS_index_\\d{4}_6(2[5-9]|3[0-5])$", names(chirps_data), value = TRUE)
+
+# Reshape the CHIRPS data to long format
+monthly_chirps_long <- chirps_data %>%
+  filter(region == 2) %>% 
+  select(all_of(monthly_chirps_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("year", "month"),
+    names_pattern = "CHIRPS_index_(\\d{4})_(\\d{3})",
+    values_to = "value"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    month = as.numeric(month)
+  )
+
+# Calculate average for each monthly interval (625 to 635) for CHIRPS
+chirps_averages <- monthly_chirps_long %>%
+  group_by(month) %>%
+  summarize(avg_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+  mutate(dataset = "CHIRPS")
+
+# Add the CPC dataset for comparison
+cpc_averages <- monthly_cpc_long %>%
+  group_by(month) %>%
+  summarize(avg_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+  mutate(dataset = "CPC")
+
+# Combine both datasets
+combined_averages <- bind_rows(cpc_averages, chirps_averages)
+
+# Plot the combined data
+ggplot(combined_averages, aes(x = month, y = avg_value, color = dataset, group = dataset)) +
+  geom_point(size = 3) +
+  geom_line() +
+  scale_x_continuous(breaks = 625:635, labels = 625:635) +
+  scale_color_manual(values = c("CPC" = "blue", "CHIRPS" = "orange")) +
+  labs(
+    title = "East TX Average CPC and CHIRPS RI, 2012-2023",
+    x = "Monthly Interval",
+    y = "Average Index",
+    color = "Dataset"
+  ) +
+  theme_minimal()
+
+
+
+```
+
+
+
+```{r}
+
+## West TX 
+
+
+# Filter relevant columns for CPC index (monthly data)
+monthly_cpc_cols <- grep("^cpc_index_1981_base_\\d{4}_6(2[5-9]|3[0-5])$", names(chirps_data), value = TRUE)
+
+# Reshape the data to long format
+monthly_cpc_long <- chirps_data %>%
+  filter(region == 1) %>% 
+  select(all_of(monthly_cpc_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("year", "month"),
+    names_pattern = "cpc_index_1981_base_(\\d{4})_(\\d{3})",
+    values_to = "value"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    month = as.numeric(month)
+  )
+
+# Filter relevant columns for CHIRPS index (monthly data)
+monthly_chirps_cols <- grep("^CHIRPS_index_\\d{4}_6(2[5-9]|3[0-5])$", names(chirps_data), value = TRUE)
+
+# Reshape the CHIRPS data to long format
+monthly_chirps_long <- chirps_data %>%
+  filter(region == 1) %>% 
+  select(all_of(monthly_chirps_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("year", "month"),
+    names_pattern = "CHIRPS_index_(\\d{4})_(\\d{3})",
+    values_to = "value"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    month = as.numeric(month)
+  )
+
+# Calculate average for each monthly interval (625 to 635) for CHIRPS
+chirps_averages <- monthly_chirps_long %>%
+  group_by(month) %>%
+  summarize(avg_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+  mutate(dataset = "CHIRPS")
+
+# Add the CPC dataset for comparison
+cpc_averages <- monthly_cpc_long %>%
+  group_by(month) %>%
+  summarize(avg_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
+  mutate(dataset = "CPC")
+
+# Combine both datasets
+combined_averages <- bind_rows(cpc_averages, chirps_averages)
+
+# Plot the combined data
+ggplot(combined_averages, aes(x = month, y = avg_value, color = dataset, group = dataset)) +
+  geom_point(size = 3) +
+  geom_line() +
+  scale_x_continuous(breaks = 625:635, labels = 625:635) +
+  scale_color_manual(values = c("CPC" = "blue", "CHIRPS" = "orange")) +
+  labs(
+    title = "West TX Average CPC and CHIRPS RI, 2012-2023",
+    x = "Monthly Interval",
+    y = "Average Index",
+    color = "Dataset"
+  ) +
+  theme_minimal()
+
+
+```
+
+## Summary stats, % breakdown of practice type
+
+```{r}
+
+year_df <- data.frame(year = 2023:2016)
+
+for(year in year_df$year){
+  print(year)
+  row_index <- which(year_df$year == year)
+  year_2 <- substr(year, 3, 4)
+  tpu_names <- read.csv(here("data/PRF_tpu/tpu_names.csv"))
+  tpu <- read.csv(here(paste0("data/PRF_tpu/SOBSCCTPU", year_2, ".TXT")), sep = "|", header = F)
+  names(tpu) <- names(tpu_names)
+  
+  tpu_prf <- tpu %>% 
+    filter(State.Abbreviation == "TX") %>% 
+    filter(Insurance.Plan.Abbreviation == "RI") %>% 
+    filter(Liability.Amount > 0) %>% 
+    filter(Commodity.Code == 88) %>% ## for PRF
+   # filter(Type.Name == use_type) %>% 
+    filter(Reporting.Level.Type == "Acres") 
+  
+  tpu_prf$use_type <- substring(tpu_prf$Practice.Name, 11)
+  
+  use_type_dict <- c("Index Interval" = "Grazing" ,
+                     "Index Interval (Non-Irrigated)" = "Haying (Non-Irrigated)",
+                     "Index Interval (Irrigated)" = "other",
+                     "Index Interval (Non-Irr) (OT)" = "other",
+                     "Index Interval (Non-Irr) (OC)" = "other",
+                     "Index Interval (Irr) (OC)" = "other",
+                     "Index Interval (Irr) (OT)" = "other" )
+  
+  tpu_prf$use_type <- use_type_dict[tpu_prf$use_type]
+  
+  group_sums <- tpu_prf %>%
+    group_by(use_type) %>%
+    summarize(total = sum(Net.Reporting.Level.Amount , na.rm = TRUE), .groups = "drop")
+  
+  group_sums$percent <- 100* (group_sums$total/sum(group_sums$total))
+  
+  year_df$grazing_pct_acres[row_index] <- group_sums %>% 
+    filter(use_type == "Grazing") %>% 
+    pull(percent)
+  year_df$haying_pct_acres[row_index] <- group_sums %>% 
+    filter(use_type == "Haying (Non-Irrigated)") %>% 
+    pull(percent)
+  year_df$other_pct_acres[row_index] <- group_sums %>% 
+    filter(use_type == "other") %>% 
+    pull(percent)
+  
+  ## Liability $
+  
+  group_sums <- tpu_prf %>%
+    group_by(use_type) %>%
+    summarize(total = sum(Liability.Amount , na.rm = TRUE), .groups = "drop")
+  
+  group_sums$percent <- 100* (group_sums$total/sum(group_sums$total))
+  
+  year_df$grazing_pct_liability[row_index] <- group_sums %>% 
+    filter(use_type == "Grazing") %>% 
+    pull(percent)
+  year_df$haying_pct_liability[row_index] <- group_sums %>% 
+    filter(use_type == "Haying (Non-Irrigated)") %>% 
+    pull(percent)
+  year_df$other_pct_liability[row_index] <- group_sums %>% 
+    filter(use_type == "other") %>% 
+    pull(percent)
+}
+
+
+
+
+```
+
+```{r}
+
+## plot for acreage breakdown
+
+df_long <- year_df %>%
+  pivot_longer(
+    cols = c("grazing_pct_acres",
+             "haying_pct_acres",
+             "other_pct_acres"),  # Columns for y values
+    names_to = "group",           # New column for group names
+    values_to = "value"           # New column for y values
+  )
+
+# Plot with ggplot
+ggplot(df_long, aes(x = year, y = value, color = group)) +
+  geom_line(size = 1) +   # Lines for each group
+  geom_point(size = 2) +  # Points for each group
+  labs(
+    title = "Use type Acreage %",
+    x = "Year",
+    y = "Percent acreage",
+    color = "Group"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+
+## plot for $ breakdown
+
+df_long <- year_df %>%
+  pivot_longer(
+    cols = c("grazing_pct_liability",
+             "haying_pct_liability",
+             "other_pct_liability"),  # Columns for y values
+    names_to = "group",           # New column for group names
+    values_to = "value"           # New column for y values
+  )
+
+# Plot with ggplot
+ggplot(df_long, aes(x = year, y = value, color = group)) +
+  geom_line(size = 1) +   # Lines for each group
+  geom_point(size = 2) +  # Points for each group
+  labs(
+    title = "Liability ($)",
+    x = "Year",
+    y = "Percent $",
+    color = "Group"
+  ) +
+  theme_minimal()
+
+
+
+```
+
+
+
+
+### historical interval selection, East vs West TX
+#### East TX 
+```{r}
+
+## East TX 
+## keep grazing and haying separate
+
+ 
+prf_df <- data.frame('year' = 2012:2023)
+
+for(interval in 625:635){
+  prf_df[[paste0("grazing_acreage_", interval)]] <- NA
+  prf_df[[paste0("haying_acreage_", interval)]] <- NA
+}
+
+
+for(year in prf_df$year){
+  print(year)
+  row_index <- which(prf_df$year == year)
+  year_2 <- substr(as.character(year), 3, 4)
+  data <- read.csv(here(paste0("data/PRF_tpu/SOBSCCTPU", year_2, ".txt")),
+                   sep = '|')
+  
+  names(data) <- column_names
+  names(data) <- tolower(names(data))
+
+  
+  ## filter to East TX
+  data <- data %>% filter(state.abbreviation == "TX") %>% filter(county.code %in% east_tx_county_codes)
+  
+  
+  ## filter to PRF
+  data <- data %>% filter(commodity.code == 88)
+  
+  ## filter to grazing 
+  grazing <- data %>% filter(type.code %in% c(7, 64))
+
+  for(interval in 625:635){
+    alternate_interval <- interval - 100
+    grazing_interval <- grazing %>% filter(practice.code %in% c(interval, alternate_interval ))
+    prf_df[[paste0("grazing_acreage_", interval)]][row_index] <- sum(grazing_interval$net.reporting.level.amount)
+  }
+  
+  ## filter to haying 
+  haying <- data %>% filter(type.code %in% c(30, 63))
+
+  for(interval in 625:635){
+    alternate_interval <- interval - 100
+    haying_interval <- haying %>% filter(practice.code %in% c(interval, alternate_interval ))
+    
+    prf_df[[paste0("haying_acreage_", interval)]][row_index] <- sum(haying_interval$net.reporting.level.amount)
+  }
+}
+
+prf_df$total_grazing_acreage <- rowSums(prf_df %>% select(starts_with("grazing_acreage_") & matches("625|626|627|628|629|630|631|632|633|634|635")))
+
+prf_df$total_haying_acreage <- rowSums(prf_df %>% select(starts_with("haying_acreage_") & matches("625|626|627|628|629|630|631|632|633|634|635")))
+
+for(interval in 625:635){
+  prf_df[[paste0("grazing_pct_", interval)]] <- 100*(prf_df[[paste0("grazing_acreage_", interval)]])/ prf_df$total_grazing_acreage
+  prf_df[[paste0("haying_pct_", interval)]] <- 100*(prf_df[[paste0("haying_acreage_", interval)]])/ prf_df$total_haying_acreage
+}
+
+```
+
+
+
+```{r}
+
+## East TX, grazing
+
+prf_df_longer <- prf_df %>% 
+  filter(year >= 2012) %>%  pivot_longer(cols = starts_with("grazing_pct_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+prf_df_longer$interval <- substr(prf_df_longer$variable,
+                                 nchar(prf_df_longer$variable) - 2,
+                                 nchar(prf_df_longer))
+
+prf_df_longer$label <- month_dict[substr(prf_df_longer$variable,
+                                         nchar(prf_df_longer$variable) - 2,
+                                         nchar(prf_df_longer))]
+
+prf_df_longer$label <- factor(prf_df_longer$label,
+                              levels = month_dict)
+
+
+## odd intervals
+variables_to_plot <- paste0("grazing_pct_", seq(625, 635, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+
+```
+
+```{r}
+
+## even intervals
+variables_to_plot <- paste0("grazing_pct_", seq(626, 634, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+```
+
+```{r}
+
+
+## East TX, haying
+
+prf_df_longer <- prf_df %>% 
+  filter(year >= 2012) %>%  pivot_longer(cols = starts_with("haying_pct_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+prf_df_longer$interval <- substr(prf_df_longer$variable,
+                                 nchar(prf_df_longer$variable) - 2,
+                                 nchar(prf_df_longer))
+
+prf_df_longer$label <- month_dict[substr(prf_df_longer$variable,
+                                         nchar(prf_df_longer$variable) - 2,
+                                         nchar(prf_df_longer))]
+
+prf_df_longer$label <- factor(prf_df_longer$label,
+                              levels = month_dict)
+
+
+## odd intervals
+variables_to_plot <- paste0("haying_pct_", seq(625, 635, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+
+```
+
+
+```{r}
+
+## even intervals
+variables_to_plot <- paste0("haying_pct_", seq(626, 634, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+```
+
+
+
+### West TX plots
+
+```{r}
+
+## West TX 
+## keep grazing and haying separate
+
+ 
+prf_df <- data.frame('year' = 2012:2023)
+
+for(interval in 625:635){
+  prf_df[[paste0("grazing_acreage_", interval)]] <- NA
+  prf_df[[paste0("haying_acreage_", interval)]] <- NA
+}
+
+
+for(year in prf_df$year){
+  print(year)
+  row_index <- which(prf_df$year == year)
+  year_2 <- substr(as.character(year), 3, 4)
+  data <- read.csv(here(paste0("data/PRF_tpu/SOBSCCTPU", year_2, ".txt")),
+                   sep = '|')
+  
+  names(data) <- column_names
+  names(data) <- tolower(names(data))
+
+  
+  ## filter to West TX
+  data <- data %>% filter(state.abbreviation == "TX") %>% filter(county.code %in% west_tx_county_codes)
+  
+  
+  ## filter to PRF
+  data <- data %>% filter(commodity.code == 88)
+  
+  ## filter to grazing 
+  grazing <- data %>% filter(type.code %in% c(7, 64))
+
+  for(interval in 625:635){
+    alternate_interval <- interval - 100
+    grazing_interval <- grazing %>% filter(practice.code %in% c(interval, alternate_interval ))
+    prf_df[[paste0("grazing_acreage_", interval)]][row_index] <- sum(grazing_interval$net.reporting.level.amount)
+  }
+  
+  ## filter to haying 
+  haying <- data %>% filter(type.code %in% c(30, 63))
+
+  for(interval in 625:635){
+    alternate_interval <- interval - 100
+    haying_interval <- haying %>% filter(practice.code %in% c(interval, alternate_interval ))
+    
+    prf_df[[paste0("haying_acreage_", interval)]][row_index] <- sum(haying_interval$net.reporting.level.amount)
+  }
+}
+
+prf_df$total_grazing_acreage <- rowSums(prf_df %>% select(starts_with("grazing_acreage_") & matches("625|626|627|628|629|630|631|632|633|634|635")))
+
+prf_df$total_haying_acreage <- rowSums(prf_df %>% select(starts_with("haying_acreage_") & matches("625|626|627|628|629|630|631|632|633|634|635")))
+
+for(interval in 625:635){
+  prf_df[[paste0("grazing_pct_", interval)]] <- 100*(prf_df[[paste0("grazing_acreage_", interval)]])/ prf_df$total_grazing_acreage
+  prf_df[[paste0("haying_pct_", interval)]] <- 100*(prf_df[[paste0("haying_acreage_", interval)]])/ prf_df$total_haying_acreage
+}
+
+```
+
+```{r}
+
+## West TX, grazing
+
+prf_df_longer <- prf_df %>% 
+  filter(year >= 2012) %>%  pivot_longer(cols = starts_with("grazing_pct_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+prf_df_longer$interval <- substr(prf_df_longer$variable,
+                                 nchar(prf_df_longer$variable) - 2,
+                                 nchar(prf_df_longer))
+
+prf_df_longer$label <- month_dict[substr(prf_df_longer$variable,
+                                         nchar(prf_df_longer$variable) - 2,
+                                         nchar(prf_df_longer))]
+
+prf_df_longer$label <- factor(prf_df_longer$label,
+                              levels = month_dict)
+
+
+## odd intervals
+variables_to_plot <- paste0("grazing_pct_", seq(625, 635, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+
+```
+
+```{r}
+
+## even intervals
+variables_to_plot <- paste0("grazing_pct_", seq(626, 634, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+```
+
+```{r}
+
+
+## West TX, haying
+
+prf_df_longer <- prf_df %>% 
+  filter(year >= 2012) %>%  pivot_longer(cols = starts_with("haying_pct_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+prf_df_longer$interval <- substr(prf_df_longer$variable,
+                                 nchar(prf_df_longer$variable) - 2,
+                                 nchar(prf_df_longer))
+
+prf_df_longer$label <- month_dict[substr(prf_df_longer$variable,
+                                         nchar(prf_df_longer$variable) - 2,
+                                         nchar(prf_df_longer))]
+
+prf_df_longer$label <- factor(prf_df_longer$label,
+                              levels = month_dict)
+
+
+## odd intervals
+variables_to_plot <- paste0("haying_pct_", seq(625, 635, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,25)
+
+```
+
+
+```{r}
+
+## even intervals
+variables_to_plot <- paste0("haying_pct_", seq(626, 634, 2))
+
+ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) + 
+  geom_line(aes(x = year, y = value, group = interval, color = label),  # Map color to 'label'
+            lwd = 3, alpha = 0.7) +
+  labs(color = "Label") +  # Update legend title to reflect 'label'
+  theme_minimal(base_size = 24) +  # Set a larger base size for all text
+  theme(
+    legend.position = "right",      # Move legend to the right
+    plot.title = element_text(size = 24, face = "bold"),  # Larger title
+    axis.title = element_text(size = 24),  # Larger axis titles
+    axis.text = element_text(size = 24)    # Larger axis labels
+  ) +
+  ylab("Interval Selection %") + 
+  xlab("") + ylim(0,20)
+```
+
+
+### county size, # of CPC and CHIRPS grids per county etc
+
+```{r}
+
+
+tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+tx_counties <- st_set_crs(tx_counties, 4326)  # Example: EPSG 4326 (WGS84)
+
+tx_counties_rpj <- st_transform(tx_counties, crs = 26914)
+
+# Calculate the area of each county
+county_areas <- st_area(tx_counties_rpj)
+
+# Convert the area from square meters to square kilometers (optional)
+county_areas_km2 <- as.numeric(county_areas) / 1e6
+
+# Calculate the mean county size (in square kilometers)
+mean_county_size <- mean(county_areas_km2, na.rm = TRUE) %>% round()
+
+num_counties <- sum(!is.na(tx_counties$COUNTY))
+
+
+## mean chirips cell count
+tx_county_areas_cpc <- read.csv(here("data/tx_county-areas/cpc-county-areas.csv"))
+
+tx_counties$cpc_cell_count <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k] %>% as.numeric()
+  print(current_county_id)
+  cpc_cells <- tx_county_areas_cpc %>% 
+    filter(County.Code == current_county_id) %>% 
+    filter(Area > 0) %>% 
+    nrow()
+})
+
+mean_cpc_cell_count <- round(mean(tx_counties$cpc_cell_count))
+
+## mean chirips cell count
+tx_county_areas <- read.csv(here("data/tx_county-areas/chirps-county-areas.csv"))
+
+tx_counties$chirps_cell_count <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k] %>% as.numeric()
+  print(current_county_id)
+  chirps_cells <- tx_county_areas %>% 
+    filter(County.Code == current_county_id) %>% 
+    filter(Area > 0) %>% 
+    nrow()
+})
+
+mean_chirps_cell_count <- round(mean(tx_counties$chirps_cell_count))
+
+## county df
+
+df_labels <- c("# counties", "mean county size", "mean CPC grids per county", "mean CHIRPS grids per county")
+df_values <- c(num_counties, paste0(mean_county_size, " km\u00B2"), mean_cpc_cell_count, mean_chirps_cell_count )
+
+county_df <- data.frame("attribute" = df_labels, "value" = df_values)
+
+```
+
+
+
+
+
+## Binary payout
+### payout determinations, similar to Table 1, Figure 3
+
+```{r}
+
+for(interval in 625:635){
+  print(interval)
+  chirps_column <- paste0("CHIRPS_index_2021_", interval)
+  cpc_column <- paste0("cpc_index_1981_base_2021_", interval)
+  print(sum(is.na(chirps_data[[chirps_column]])))
+  print(sum(is.na(chirps_data[[cpc_column]])))
+
+
+  chirps_data[[paste0("CHIRPS_payout_only_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] < 0.9 & chirps_data[[cpc_column]] >= 0.9, 1, 0)
+  
+  chirps_data[[paste0("CPC_payout_only_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] >= 0.9 & chirps_data[[cpc_column]] < 0.9, 1, 0)
+  chirps_data[[paste0("both_payout_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] < 0.9 & chirps_data[[cpc_column]] < 0.9, 1, 0)
+  chirps_data[[paste0("neither_payout_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] >= 0.9 & chirps_data[[cpc_column]] >= 0.9, 1, 0)
+}
+
+chirps_data$CHIRPS_payout_only_sum <- rowSums(chirps_data[, paste0("CHIRPS_payout_only_2021_", 625:635)])
+chirps_data$CPC_payout_only_sum <- rowSums(chirps_data[, paste0("CPC_payout_only_2021_", 625:635)])
+chirps_data$both_payout_sum <- rowSums(chirps_data[, paste0("both_payout_2021_", 625:635)])
+chirps_data$neither_payout_sum <- rowSums(chirps_data[, paste0("neither_payout_2021_", 625:635)])
+
+chirps_data_summary <- chirps_data %>%
+  group_by(GRIDCODE) %>%
+  summarise(
+    sum_chirps_only = sum(CHIRPS_payout_only_sum),
+    sum_cpc_only = sum(CPC_payout_only_sum),
+    sum_both_payout = sum(both_payout_sum),
+    sum_neither_payout = sum(neither_payout_sum),
+    Count = 11 * n()
+  )
+
+chirps_data_summary$CHIRPS_only_pct <- 100*chirps_data_summary$sum_chirps_only/chirps_data_summary$Count
+chirps_data_summary$CPC_only_pct <- 100*chirps_data_summary$sum_cpc_only/chirps_data_summary$Count
+chirps_data_summary$total_disagreement_pct <- chirps_data_summary$CHIRPS_only_pct + chirps_data_summary$CPC_only_pct
+# Merge the summarized df2 with df1
+  
+
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+# monthly_averages_merge <- merge(grids, monthly_averages,
+#                           by = c("lon", "lat"))
+
+
+
+## filter to TX grid cells
+year <- 2021
+tx_grid_ids <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"), full.names = T) %>%
+  first() %>% read.csv() %>% pull(GRIDCODE) %>% unique()
+
+tx_grids <- grids %>% filter(GRIDCODE %in% tx_grid_ids)
+plot(tx_grids)
+
+tx_grids <- tx_grids %>% filter(GRIDCODE %in% unique(chirps_data$GRIDCODE))
+tx_grids <- merge(tx_grids, chirps_data_summary,
+                  by = "GRIDCODE", all.x = T)
+
+plot(tx_grids["CHIRPS_only_pct"], 
+       breaks = seq(0, 60, by = 5), # Set zlim from 0 to 100 with 10-unit intervals
+    main = "% CHIRPS only payout",
+    key.pos = 1 # Optional: Position the legend below the plot)
+)
+
+plot(tx_grids["CPC_only_pct"], 
+       breaks = seq(0, 60, by = 5), # Set zlim from 0 to 100 with 10-unit intervals
+    main = "% CPC only payout",
+    key.pos = 1 # Optional: Position the legend below the plot)
+)
+
+plot(tx_grids["total_disagreement_pct"], 
+       breaks = seq(0, 60, by = 5), # Set zlim from 0 to 100 with 10-unit intervals
+    main = "% payout disagreement",
+    key.pos = 1 # Optional: Position the legend below the plot)
+)
+
+## crosstab table
+binary_payout <- data.frame("CPC_yes" = c(NA, NA), "CPC_no" = c(NA, NA))
+
+rownames(binary_payout) <- c("CHIRPS_yes", "CHIRPS_no")
+
+binary_payout$CPC_yes[1] <- sum(chirps_data_summary$sum_both_payout)
+binary_payout$CPC_yes[2] <- sum(chirps_data_summary$sum_cpc_only)
+binary_payout$CPC_no[1] <- sum(chirps_data_summary$sum_chirps_only)
+binary_payout$CPC_no[2] <- sum(chirps_data_summary$sum_neither_payout)
+
+```
+
+
+## Intra-grid variation
+### Something similar to Figure 2
+
+```{r}
+
+
+tx_grid_cells <- unique(chirps_data$GRIDCODE)
+
+## load CPC grids as sf object
+
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp")) %>% 
+  filter(GRIDCODE %in% tx_grid_cells)
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+grid_variation <- function(grids_df, chirps_df, col_name){
+  if(!("count" %in% colnames(grids_df))){
+    grids_df$count <- sapply(grids_df$GRIDCODE, function(x){
+      chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+      count <- nrow(chirps_cells)
+    })
+  }
+  
+  grids_df[[paste0(col_name, "_CV")]] <- sapply(grids_df$GRIDCODE, function(x){
+    chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+    cv <- cv(chirps_cells[[col_name]])
+  })
+  
+  grids_df[[paste0(col_name, "_SD")]] <- sapply(grids_df$GRIDCODE, function(x){
+    chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+    sd <- sd(chirps_cells[[col_name]])
+  })
+  return(grids_df)
+}
+
+for(interval in 625:635){
+  print(interval)
+  column <- paste0("CHIRPS_precip_2021_", interval)
+  grids <- grid_variation(grids, chirps_data, column)
+}
+
+columns_to_check <- paste0("CHIRPS_precip_2021_", 625:635, "_CV")
+
+# Find the maximum value across these columns
+max_cv <- max((grids %>% st_drop_geometry() )[, columns_to_check], na.rm = TRUE)
+
+
+
+par(mfrow = c(3, 4)) # 3 rows, 4 columns
+
+
+png("plots.png")
+
+for(interval in 625:635){
+  print(interval)
+  column_to_plot <- paste0("CHIRPS_precip_2021_", interval, "_CV")
+  plot(
+    (grids %>% filter(count >= 20)) [column_to_plot],
+    # col = color_palette[as.numeric(class_intervals)],
+    main = paste("CV, Intra-grid CHIRPS precip: ", interval),
+    breaks = seq(0, 40, by = 5),
+    border = "grey"
+  )
+}
+
+legend(
+  "center", 
+  legend = paste(breaks[-length(breaks)], "-", breaks[-1]), 
+  fill = color_palette, 
+  title = "Legend: CV Intervals"
+)
+
+dev.off()
+
+
+```
+
+```{r}
+
+library(sf)
+library(dplyr)
+library(cowplot)
+library(ggplot2)
+library(RColorBrewer)
+
+# Define breaks and color palette
+breaks <- seq(0, 40, by = 5)
+#color_palette <- hcl.colors(length(breaks) - 1, "YlOrRd")
+color_palette <- brewer.pal(n = length(breaks) - 1, name = "Blues")
+
+# Filter the sf object by count >= 20
+grids_filt <- grids %>% filter(count >= 20)
+
+# Create an empty list to store individual plots
+plots_list <- list()
+
+# Loop to generate 11 plots
+for (interval in 625:635) {
+  column_to_plot <- paste0("CHIRPS_precip_2021_", interval, "_CV")
+  
+  # Get the values for the current interval column
+  values <- grids_filt[[column_to_plot]]
+  
+  # Assign colors based on the values using findInterval
+  colors <- color_palette[findInterval(values, breaks)]
+
+  # Create each plot and add it to the list
+  p <- ggplot(data = grids_filt) +
+    geom_sf(aes(fill = factor(findInterval(values, breaks)))) + 
+    scale_fill_manual(values = color_palette) + 
+    labs(title = paste(month_dict[interval %>% as.character()])) +
+    theme_minimal() + 
+    theme(legend.position = "none", 
+    axis.text.x = element_blank(),  # Remove x-axis labels
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),  # Remove x-axis label
+    axis.title.y = element_blank() )# Hide legend initially
+
+  # Add the plot to the list
+  plots_list[[interval - 624]] <- p
+}
+
+
+
+# Create the legend separately using ggplot2
+legend_plot <- ggplot(data = grids_filt) +
+  geom_sf(aes(fill = factor(findInterval(values, breaks)))) +
+  scale_fill_manual(values = color_palette, breaks = breaks[-length(breaks)], 
+                    labels = paste(breaks[-length(breaks)], "-", breaks[-1])) +
+  labs(title = "Legend: CV Intervals") +
+  theme_void() +
+  theme(legend.position = "bottom")
+
+# Combine the plots and the legend using cowplot
+final_plot <- plot_grid(
+  plotlist = plots_list, 
+  nrow = 3,
+  ncol = 4, 
+  align = 'v',
+  axis = 'tb'
+)
+
+
+
+# Combine the grid of plots and the legend
+final_plot_with_legend <- plot_grid(final_plot, legend_plot, ncol = 1, rel_heights = c(1, 0.1))
+
+# Save the combined plot to a PNG file
+ggsave("plots_with_legend.png", final_plot_with_legend, width = 16, height = 12)
+
+
+```
+
+```{r}
+
+
+library(grid)
+library(gridExtra)
+
+# Define breaks and color palette
+breaks <- seq(0, 40, by = 5)
+color_palette <- brewer.pal(n = length(breaks) - 1, name = "Blues")
+
+# Define labels for the legend
+labels <- paste(breaks[-length(breaks)], "-", breaks[-1], "%", sep = "")
+
+# Create a grob for each legend item
+legend_items <- lapply(seq_along(color_palette), function(i) {
+  gtable::gtable_row(
+    name = paste("legend_item", i),
+    grobs = list(
+      rectGrob(gp = gpar(fill = color_palette[i], col = "black")),  # Color box
+      textGrob(labels[i], x = 0, hjust = 0, gp = gpar(fontsize = 12))  # Label text
+    ),
+    widths = unit(c(1, 4), "cm")  # Adjust box and text size
+  )
+})
+
+# Combine all legend items into a single layout
+legend_grob <- do.call(arrangeGrob, c(legend_items, ncol = 1))
+
+# Draw the legend
+grid.newpage()
+grid.draw(legend_grob)
+
+
+```
+
+
+## Payout magnitudes ($)
+### Similar to Table 2, CPC and CHIRPS estimated payouts by coverage level, and % enrollment (acreage)
+
+```{r}
+
+load_rda_to_variable <- function(file_path, variable_name) {
+  # Load the .rda file
+  loaded_objects <- load(file_path)
+  
+  # Assign the loaded object to the specified variable name
+  if (length(loaded_objects) != 1) {
+    stop("The .rda file must contain exactly one object.")
+  }
+  
+  assign(variable_name, get(loaded_objects), envir = .GlobalEnv)
+}
+
+## combine grazing and non-irrigated haying
+load_rda_to_variable(here("data/payouts/tpu_Grazing_2021_cpc_index_1981_base.rda"),
+                     "grazing_cpc_2021")
+
+grazing_cpc_indemnities_group <-  grazing_cpc_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_cpc_index_1981_base, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CPC_Grazing = sum_value)
+
+load_rda_to_variable(here("data/payouts/tpu_Haying_2021_cpc_index_1981_base.rda"),
+                     "haying_cpc_2021")
+
+haying_cpc_indemnities_group <-  haying_cpc_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_cpc_index_1981_base, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CPC_Haying = sum_value)
+
+load_rda_to_variable(here("data/payouts/tpu_Grazing_2021_CHIRPS_index.rda"),
+                     "grazing_chirps_2021")
+
+grazing_chirps_indemnities_group <-  grazing_chirps_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_CHIRPS_index, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CHIRPS_Grazing = sum_value)
+
+load_rda_to_variable(here("data/payouts/tpu_Haying_2021_CHIRPS_index.rda"),
+                     "haying_chirps_2021")
+
+haying_chirps_indemnities_group <-  haying_chirps_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_CHIRPS_index, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CHIRPS_Haying = sum_value)
+
+
+
+all_payouts <- grazing_cpc_indemnities_group %>%
+  full_join(grazing_chirps_indemnities_group, by = "Threshold") %>%
+  full_join(haying_cpc_indemnities_group, by = "Threshold") %>%
+  full_join(haying_chirps_indemnities_group, by = "Threshold") %>% 
+  mutate(across(-1, round, digits = 0))  # Replace 'digits = 2' with desired precision
+
+all_payouts_combined <- all_payouts
+all_payouts_combined$CPC_payout <- all_payouts_combined$CPC_Grazing + all_payouts_combined$CPC_Haying
+all_payouts_combined$CHIRPS_payout <- all_payouts_combined$CHIRPS_Grazing + all_payouts_combined$CHIRPS_Haying
+all_payouts_combined$CHIRPS_CPC_ratio <- round(all_payouts_combined$CHIRPS_payout/all_payouts_combined$CPC_payout, 2)
+
+all_payouts_combined <- all_payouts_combined %>% select(Threshold, CPC_payout, CHIRPS_payout, CHIRPS_CPC_ratio)
+
+```
+
+
+
+#### Table for all year payouts (CPC vs CHIRPS)
+```{r}
+
+year_df <- data.frame(year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_CHIRPS_index.rda")),
+                     "grazing_chirps")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_CHIRPS_index.rda")),
+                     "haying_chirps")
+  
+  cpc_payout <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  chirps_payout <- sum(grazing_chirps$Indemnity_CHIRPS_index) + sum(haying_chirps$Indemnity_CHIRPS_index)
+  
+  year_df$CPC[k] <- paste0("$", round(cpc_payout/1000000, 1), " M")
+  year_df$CHIRPS[k]  <- paste0("$", round(chirps_payout/1000000, 1), " M")
+  year_df$CHIRPS_CPC_ratio[k] <- round(chirps_payout/cpc_payout, 2)
+  
+  
+}
+
+
+```
+
+
+#### Table for all year payouts (CPC estimated vs CPC actual)
+```{r}
+
+year_df <- data.frame(year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+
+  cpc_payout <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  cpc_actual_payout <- sum(grazing_cpc$Indemnity.Amount) + sum(haying_cpc$Indemnity.Amount)
+  
+  year_df$CPC_estimated[k] <- paste0("$", round(cpc_payout/1000000, 1), " M")
+  year_df$CPC_actual[k]  <- paste0("$", round(cpc_actual_payout/1000000, 1), " M")
+  year_df$CPC_estimated_actual_ratio[k] <- round(cpc_payout/cpc_actual_payout, 2)
+  
+}
+
+```
+
+
+
+
+#### Table for all year payouts (CPC 1981 estimated vs CPC 1948 estimated)
+```{r}
+
+year_df <- data.frame(year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+
+  cpc_payout_1981 <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_cpc_index.rda")),
+                     "grazing_cpc_1948")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_cpc_index.rda")),
+                     "haying_cpc_1948")
+  
+  cpc_payout_1948 <- sum(grazing_cpc_1948$Indemnity_cpc_index) + sum(haying_cpc_1948$Indemnity_cpc_index)
+
+  year_df$CPC_estimated_1981[k] <- paste0("$", round(cpc_payout_1981/1000000, 1), " M")
+  year_df$CPC_estimated_1948[k] <- paste0("$", round(cpc_payout_1948/1000000, 1), " M")
+
+  year_df$CPC_1948_1981_ratio[k] <- round(cpc_payout_1948/cpc_payout_1981, 2)
+  
+}
+
+```
+
+
+#### Table for all year payouts (CHIRPS fine vs CHIRPS coarse)
+```{r}
+
+year_df <- data.frame(year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$year[k]
+  print(year)
+  
+
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_CHIRPS_index.rda")),
+                     "grazing_chirps")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_CHIRPS_index.rda")),
+                     "haying_chirps")
+  
+  chirps_payout <- sum(grazing_chirps$Indemnity_CHIRPS_index) + sum(haying_chirps$Indemnity_CHIRPS_index)
+  
+  print(sum(grazing_chirps$Indemnity_CHIRPS_index))
+  print(sum(haying_chirps$Indemnity_CHIRPS_index))
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Grazing_", year, "_CHIRPS_index_coarse.rda")),
+                     "grazing_chirps_coarse")
+  
+  load_rda_to_variable(here(paste0("data/payouts/tpu_Haying_", year, "_CHIRPS_index_coarse.rda")),
+                     "haying_chirps_coarse")
+  
+    print(sum(grazing_chirps_coarse$Indemnity_CHIRPS_index_coarse))
+    print(sum(haying_chirps_coarse$Indemnity_CHIRPS_index_coarse))
+  
+  chirps_payout_coarse <- sum(grazing_chirps_coarse$Indemnity_CHIRPS_index_coarse) + sum(haying_chirps_coarse$Indemnity_CHIRPS_index_coarse)
+
+  year_df$CHIRPS[k]  <- paste0("$", round(chirps_payout/1000000, 1), " M")
+  year_df$CHIRPS_coarse[k]  <- paste0("$", round(chirps_payout_coarse/1000000, 1), " M")
+
+  year_df$CHIRPS_coarse_CHIRPS_fine_ratio[k] <- round(chirps_payout_coarse/chirps_payout, 2)
+  
+  
+}
+
+
+```
+
+
+
+### Figure 4, payout difference between CPC and CHIRPS
+#### 4 maps total
+#### CPC, CHIRPS, CPC - CHIRPS, % difference
+#### just for 2021
+
+```{r}
+
+load_rda_to_variable(here("data/payouts/tpu_Grazing_2021_cpc_index_1981_base.rda"),
+                     "grazing_cpc_2021")
+
+load_rda_to_variable(here("data/payouts/tpu_Haying_2021_cpc_index_1981_base.rda"),
+                     "haying_cpc_2021")
+
+load_rda_to_variable(here("data/payouts/tpu_Grazing_2021_CHIRPS_index.rda"),
+                     "grazing_chirps_2021")
+
+load_rda_to_variable(here("data/payouts/tpu_Haying_2021_CHIRPS_index.rda"),
+                     "haying_chirps_2021")
+
+tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+tx_counties <- st_set_crs(tx_counties, 4326)  # Example: EPSG 4326 (WGS84)
+tx_counties$COUNTYID <- as.numeric(tx_counties$COUNTYID)
+
+tx_counties$CPC_indemnities <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k]
+  grazing_cpc <- grazing_cpc_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_cpc_index_1981_base) %>% 
+    sum()
+  haying_cpc <- haying_cpc_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_cpc_index_1981_base) %>% 
+    sum()
+  cpc_indemnity <- grazing_cpc + haying_cpc
+})
+
+tx_counties$CHIRPS_indemnities <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k]
+  grazing_chirps <- grazing_chirps_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_CHIRPS_index) %>% 
+    sum()
+  haying_chirps <- haying_chirps_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_CHIRPS_index) %>% 
+    sum()
+  chirps_indemnity <- grazing_chirps + haying_chirps
+})
+  
+tx_counties$CHIRPS_minus_CPC <- tx_counties$CHIRPS_indemnities - tx_counties$CPC_indemnities
+
+tx_counties$CHIRPS_CPC_ratio <- tx_counties$CHIRPS_indemnities / tx_counties$CPC_indemnities
+
+
+
+```
+
+#### map plots
+##### CPC payouts
+
+```{r}
+
+max_payout <- max(max(tx_counties$CPC_indemnities), max(tx_counties$CHIRPS_indemnities))
+
+
+# Calculate breaks for the population column
+n_breaks <- 7  # Number of breaks (adjustable)
+breaks <- classInt::classIntervals(
+  tx_counties$CPC_indemnities,
+  n = n_breaks,
+  style = "quantile"  # Choose a style: "pretty", "quantile", "equal", etc.
+)
+
+adjusted_breaks <- c(0, 100000, 200000, 500000, 1000000, 3000000, 9000000)
+  
+
+# Format the labels with dollar signs and commas
+formatted_labels <- paste0(
+  scales::label_dollar()(adjusted_breaks[-length(adjusted_breaks)]), " - ",
+  scales::label_dollar()(adjusted_breaks[-1])
+)
+
+# Assign the formatted labels using cut()
+tx_counties$CPC_indemnity_group <- cut(
+  tx_counties$CPC_indemnities,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+
+
+colors <- RColorBrewer::brewer.pal(n = length(adjusted_breaks) - 1, "Blues")
+
+# Step 4: Plot using ggplot2
+ggplot(tx_counties) +
+  geom_sf(aes(fill = CPC_indemnity_group), color = "black") +
+  geom_sf(data = tx_counties %>% filter(CPC_indemnities == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name = ""
+  ) +
+  theme_minimal() +
+  labs(title = "CPC Payouts ($)")
+
+
+
+```
+
+
+
+### CHIRPS payouts
+
+```{r}
+
+
+# Assign the formatted labels using cut()
+tx_counties$CHIRPS_indemnity_group <- cut(
+  tx_counties$CHIRPS_indemnities,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+
+
+colors <- RColorBrewer::brewer.pal(n = length(adjusted_breaks) - 1, "Blues")
+
+# Step 4: Plot using ggplot2
+ggplot(tx_counties) +
+  geom_sf(aes(fill = CHIRPS_indemnity_group), color = "black") +
+  geom_sf(data = tx_counties %>% filter(CHIRPS_indemnities == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name = ""
+  ) +
+  theme_minimal() +
+  labs(title = "CHIRPS Payouts ($)")
+
+
+```
+
+
+##### Payout difference
+
+```{r}
+
+
+
+# Calculate breaks for the population column
+n_breaks <- 7  # Number of breaks (adjustable)
+breaks <- classInt::classIntervals(
+  tx_counties$CHIRPS_minus_CPC,
+  n = n_breaks,
+  style = "quantile"  # Choose a style: "pretty", "quantile", "equal", etc.
+)
+
+adjusted_breaks <- c(-2900000, -1000000, -500000, -200000, -100000, -50000, 0, 220000)
+  
+
+# Format the labels with dollar signs and commas
+formatted_labels <- paste0(
+  scales::label_dollar()(adjusted_breaks[-length(adjusted_breaks)]), " - ",
+  scales::label_dollar()(adjusted_breaks[-1])
+)
+
+# Assign the formatted labels using cut()
+tx_counties$difference_group <- cut(
+  tx_counties$CHIRPS_minus_CPC,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+n_below <- sum(adjusted_breaks <= 0) - 1  # Number of intervals below 0
+n_above <- sum(adjusted_breaks > 0) - 1  # Number of intervals above 0
+
+# Get colors
+colors_below <- rev(RColorBrewer::brewer.pal(n = max(3, n_below), "Blues")[1:n_below])
+colors_above <- RColorBrewer::brewer.pal(n = max(3, n_above), "Reds")[1:n_above]
+
+# Add white for 0 values
+colors <- c(colors_below, colors_above)
+
+
+
+# Step 4: Plot using ggplot2
+ggplot(tx_counties) +
+  geom_sf(aes(fill = difference_group), color = "black") +
+  geom_sf(data = tx_counties %>% filter(CHIRPS_minus_CPC == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name = "CHIRPS - CPC payouts ($)"
+  ) +
+  theme_minimal() +
+  labs(title = "")
+
+
+```
+
+#### Payout ratio
+
+```{r}
+
+
+adjusted_breaks <- c(seq(0, 1, 0.2), 1.5, 2)
+  
+
+# Format the labels with dollar signs and commas
+formatted_labels <- paste0(
+  (adjusted_breaks[-length(adjusted_breaks)]), " - ",
+  (adjusted_breaks[-1])
+)
+
+# Assign the formatted labels using cut()
+tx_counties$ratio_group <- cut(
+  tx_counties$CHIRPS_CPC_ratio,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+n_below <- sum(adjusted_breaks < 1) - 1  # Number of intervals below 0
+n_above <- sum(adjusted_breaks >= 1) - 1  # Number of intervals above 0
+
+# Get colors
+colors_below <- rev(RColorBrewer::brewer.pal(n = max(3, n_below), "Blues")[1:n_below])
+colors_above <- RColorBrewer::brewer.pal(n = max(3, n_above), "Reds")[1:n_above]
+
+# Add white for 0 values
+colors <- c(colors_below, colors_above)
+
+
+
+# Step 4: Plot using ggplot2
+ggplot(tx_counties) +
+  geom_sf(aes(fill = ratio_group), color = "black") +
+#  geom_sf(data = tx_counties %>% filter(CHIRPS_minus_CPC == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name = "CHIRPS:CPC ratio"
+  ) +
+  theme_minimal() +
+  labs(title = "")
+
+
+
+
+
+```
+
+
+
+
+
+#### Example of importance of Payment Calculation Factor
+#### Attibute differences in CPC vs CHIRPS payouts 
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

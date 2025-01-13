@@ -688,7 +688,7 @@ Equations used:
 Dollar Amount of Insurance Per Acre = County-Base Value * Productivity Factor (also = Liability per Acre?)
 Liability = Dollar Amount * # Acres
 Premium per acre = Liability per acre * rate 
-Payment factor = 1 - RI
+Payment factor = (trigger_threshold - RI)/trigger_threshold
 Indemnity = Liability * payment factor 
 
 Columns to add
