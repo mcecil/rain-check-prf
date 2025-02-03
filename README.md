@@ -1,6 +1,18 @@
 # PRF RI Notes.
 
-This repository compares various aspects (rates, payouts, etc) of the PRF_RI insurance program for two different precipitation data sets. The first, is the CPC derived precipitation used in the current model. The second, is finer scale (0.05 degrees) CHIRPS precipitation data. 
+This repository calculates payouts for the PRF_RI insurance program for two different precipitation data sets, related to this manuscript. The first, is the CPC derived precipitation used in the current model. The second, is finer scale (0.05 degrees) CHIRPS precipitation data. 
+
+## Input Data Sources
+- [TX Counties] . Downloaded from [Texas Tech](https://www.depts.ttu.edu/geospatial/center/TexasGISData.html) (jurisdictional boundaries)
+- [CHIRPS rainfall data] . Downloaded from Google Earth Engine using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
+- [CPC rainfall data] . Downloaded using the `rnoaa` package in [`download_cpc.R`](scripts/R/download_cpc.R)
+- [PRF Statement of Business]() . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('State/County/Crop/Coverage Level 1989 - Present')
+- [PRF Type Practice Unit]() . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('Type/Practice/Unit Structure Data Files'). Contains more granular data including interval selection.
+- [Cropland Data Layer](). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
+- [Koppen Climate Classification]() Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
+Final input data files are available on [Box](), and should be added to the folder [`data`]() 
+
+
 
 ## Downloading CHIRPS data
 
@@ -31,7 +43,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 - Summary of business data is available [here](https://www.rma.usda.gov/Information-Tools/Summary-of-Business/State-County-Crop-Summary-of-Business). We use the type/practice/unit files like "SOBSCCTPU21.TXT".
 	The files contain historical details about the payouts, premium paid, area covered, total liability, etc., on a county level.
 
-- Premium and county base value rates are downloaded from the USDA RMA API using the "extract-rates.py" script. The script extracts the data for all the counties for a given state for all the intended uses (5) and all the coverage levels (5) across the years 2007-2021 (15). Data are saved to "Colorado-2023-grazing-70-rates.csv". Rates vary based on grid cell, interval, and year. I believe the index threshold (e.g. 0.70 or 70) affects the "Premium Rate" column and the irrigation/organic type (e.g. "grazing", "haying irrigated", "haying-non-irrigated-non-organic" etc) affects the "County Base Value" column.  Data has been extracted for TX, VA, CO so far. **Currently the RMA API is not working so we are using already downloaded values for rates and CBV**.
+- Premium and county base value rates are downloaded from the USDA RMA API using the "extract-rates.py" script. The script extracts the data for all the counties for a given state for all the intended uses (5) and all the coverage levels (5) across the years 2007-2021 (15). Data are saved to "Colorado-2023-grazing-70-rates.csv". Rates vary based on grid cell, interval, and year. I believe the index threshold (e.g. 0.70 or 70) affects the "Premium Rate" column and the irrigation/organic type (e.g. "grazing", "haying irrigated", "haying-non-irrigated-non-organic" etc) affects the "County Base Value" column.  Data has been extracted for TX, VA, CO so far. **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**.
 
 ## Data augmentation
 
@@ -45,7 +57,10 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - Calculate CHIRPS grid proportions using "get-chirps-proportions.py".
 
-## Payout and analysis
+## Rainfall Index Calculation
+
+
+## Payout Calculation 
 
 - "payout.py" . Loops through years, and counties in state. Extend adds multiple elements to list. calls "calculate_payout", based on year, interval, state, county, and productivity factor. looks up intervals, total acres, subsidy level based on year, state, county code. gets list of CPC grids based on county. gets rates, CPC indices, CPC/CHIRPS proportions based on county.
   - loops over items from SOB, based on coverage level and area. this is county level, so I think it assumes each observation in a county is equally weighted across all CPC/CHIRPS grids in the county (based on proportion). it calculates CPC and CHIRPS payout for this, which includes information (from SOB) on premium, indemnity, liability
@@ -58,7 +73,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - "generate-variation.py". Output is "precipitation-coeff-var.csv". Essentially it finds the cv of CHIRPS precip values in a given grid, year, and interval (25 total obs). 
 
-## Initial figure creation
+## Figures
 
 - "group_month_cpc_na_rm.R" processes the daily CPC rainfall data (downloaded with "download_CPC.R") into a usable format, calculating monthly and 2-month interval precipitation, and full and 30-year index values for each CPC grid cell. The output file is "monthly_averages.csv". Note that NA values are treated as 0. They are infrequent, but this could be adjusted in the future.
 
@@ -71,6 +86,11 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 - "prf_sob.R" creates a simple two panel plot of acreage growth in PRF and non-PRF programs, and the yearly cost ratio for PRF.
 
 - "weather_station_density.R" reads a .tsv file of CPC weather station locations (from [here](https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/.UNIFIED_PRCP/.GAUGE_BASED/.CONUS/.v1p0/.RETRO/). These files are listed in lon lat table, but for each day from 1948-2006. We extract the table for the first and last day in the range. Later weather station dates are available [here](https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/.UNIFIED_PRCP/.GAUGE_BASED/.CONUS/.v1p0/.REALTIME/)
+
+# Replication
+
+
+
 
 
 
