@@ -2,15 +2,28 @@
 
 This repository calculates payouts for the PRF_RI insurance program for two different precipitation data sets, related to this manuscript. The first, is the CPC derived precipitation used in the current model. The second, is finer scale (0.05 degrees) CHIRPS precipitation data. 
 
+## Key files
+
+
 ## Input Data Sources
-- [TX Counties] . Downloaded from [Texas Tech](https://www.depts.ttu.edu/geospatial/center/TexasGISData.html) (jurisdictional boundaries)
-- [CHIRPS rainfall data] . Downloaded from Google Earth Engine using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
+- [CHIRPS rainfall data] . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
 - [CPC rainfall data] . Downloaded using the `rnoaa` package in [`download_cpc.R`](scripts/R/download_cpc.R)
+- [CPC grid boundaries]() . Used in both GEE and R scripts.
 - [PRF Statement of Business]() . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('State/County/Crop/Coverage Level 1989 - Present')
 - [PRF Type Practice Unit]() . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('Type/Practice/Unit Structure Data Files'). Contains more granular data including interval selection.
+- [TX Counties] . Downloaded from [Texas Tech](https://www.depts.ttu.edu/geospatial/center/TexasGISData.html) (jurisdictional boundaries)
+- [TX rates and County-Base Values] . Downloaded from USDA RMA API in [`extract-rates.py`](scripts/python/extract-rates.py).  **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**
+- [TX County Areas] . Table of county proportions belonging to CPC and CHIRPS grid cells. Calculated using GEE scripts for [CPC](https://code.earthengine.google.com/bb14c742606a6e78d2394e2b79022fb2) and [CHIRPS](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) .
 - [Cropland Data Layer](). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
 - [Koppen Climate Classification]() Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
-Final input data files are available on [Box](), and should be added to the folder [`data`]() 
+
+Final input data files are available on [Box](), and should be added to the folder [`data`]() .
+
+## Output Files
+- [`outputs`]() Contains key intermediate and final output files.
+- [`outputs\payouts`]() Simulated payout magnitudes for various data assumptions.
+- [`figures`]() Contains intermediate and final figures.
+- [`tables]() LaTeX formatted tables
 
 
 
@@ -87,8 +100,10 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - "weather_station_density.R" reads a .tsv file of CPC weather station locations (from [here](https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/.UNIFIED_PRCP/.GAUGE_BASED/.CONUS/.v1p0/.RETRO/). These files are listed in lon lat table, but for each day from 1948-2006. We extract the table for the first and last day in the range. Later weather station dates are available [here](https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/.UNIFIED_PRCP/.GAUGE_BASED/.CONUS/.v1p0/.REALTIME/)
 
-# Replication
-
+## Replication
+- These steps assume input data sources have already been downloaded.
+- Copy files from Box to [`data`]() folder.
+- Process CPC data into monthly 
 
 
 
