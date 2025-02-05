@@ -2,9 +2,6 @@
 
 This repository calculates payouts for the PRF_RI insurance program for two different precipitation data sets, related to this manuscript. The first, is the CPC derived precipitation used in the current model. The second, is finer scale (0.05 degrees) CHIRPS precipitation data. 
 
-## Key files
-
-
 ## Input Data Sources
 - [CHIRPS rainfall data](https://umd.box.com/s/9e7tvqgfu8lop17u6kmbp655zl8iuiil) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
 - [CPC rainfall data](https://umd.box.com/s/c51a4d4bzr036w2zxbr4yc8xoxtyy8ou) . Downloaded using the `rnoaa` package in [`download_cpc.R`](scripts/R/download_cpc.R)
@@ -21,6 +18,10 @@ Final input data files are available on [Box](https://umd.box.com/s/0z6z6xpikrf7
 
 ## Output Files
 - [`outputs`]() Contains key intermediate and final output files.
+  - [`monthly_averages_na_rm.csv`]()
+  - [`chirps_data_TX_ri.rda`]()
+  - [`chirps_data_TX_region.rda`]()
+  - [`grids_cv_all_years.rda`]()
 - [`outputs\payouts`]() Simulated payout magnitudes for various data assumptions.
 - [`outputs\figures`]() Contains intermediate and final figures.
 - [`outputs\tables`]() LaTeX formatted tables
