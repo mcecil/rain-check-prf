@@ -1,0 +1,154 @@
+---
+title: "ARER Figures 2-11"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+library(scales)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Table on coverage level (2021)
+## Table 4
+
+```{r}
+
+
+data_w_names <- read.csv(here("data/PRF_sob/sobcov_2024_names.csv"))
+column_names <- colnames(data_w_names)
+
+sob_21 <- read.csv(here(paste0("data/PRF_sob/raw_files/sobcov", 21, ".txt")),
+                 sep = '|') 
+names(sob_21) <- column_names
+sob_21 <- sob_21  %>%
+    filter(Commodity.Code ==  88) %>% 
+    filter(Insurance.Plan.Code == 13) %>% 
+    filter(Location.State.Abbreviation == "TX")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_cpc_index_1981_base.rda"),
+                     "grazing_cpc_2021")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_cpc_index_1981_base.rda"),
+                     "haying_cpc_2021")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_CHIRPS_index.rda"),
+                     "grazing_chirps_2021")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_CHIRPS_index.rda"),
+                     "haying_chirps_2021")
+
+
+
+
+coverage_levels <- unique(sob_21$Coverage.Level) %>% sort()
+coverage_df <- data.frame("Coverage_Level" = coverage_levels)
+
+sob_21$Coverage.Level <- round(as.numeric(sob_21$Coverage.Level), 2)
+
+coverage_df[["% Enrolled"]] <- sapply(1:nrow(coverage_df), function(k){
+  coverage_level <- coverage_df$Coverage_Level[k]
+  print(coverage_level)
+  total_acres <- sum(sob_21$Net.Reported.Quantity, na.rm = T)
+  print(total_acres)
+  sob_filt <- sob_21 %>% filter(Coverage.Level == 0.90)
+  print(nrow(sob_filt))
+  
+  coverage_level_acres <- (sob_21 %>% 
+    filter(Coverage.Level == coverage_level)) %>% 
+    pull(Net.Reported.Quantity) %>% sum(., na.rm = T)
+ # print(coverage_level_acres)
+  coverage_decimal <- coverage_level_acres/total_acres
+  coverage_percent <- percent(coverage_decimal, accuracy = 0.1) # Control decimal places with 'accuracy'
+})
+
+coverage_df[["CHIRPS_Payout"]] <- sapply(1:nrow(coverage_df), function(k){
+  coverage_level <- coverage_df$Coverage_Level[k]
+  print(coverage_level)
+  chirps_payout_grazing <- grazing_chirps_2021 %>% 
+    filter(Coverage.Level.Percent == coverage_level) %>% 
+    pull(Indemnity_CHIRPS_index) %>% 
+    sum()
+  chirps_payout_haying <- haying_chirps_2021 %>% 
+    filter(Coverage.Level.Percent == coverage_level) %>% 
+    pull(Indemnity_CHIRPS_index) %>% 
+    sum()
+  chirps_payout_total <- chirps_payout_grazing + chirps_payout_haying
+
+})
+
+coverage_df[["CPC_Payout"]] <- sapply(1:nrow(coverage_df), function(k){
+  coverage_level <- coverage_df$Coverage_Level[k]
+  print(coverage_level)
+  cpc_payout_grazing <- grazing_cpc_2021 %>% 
+    filter(Coverage.Level.Percent == coverage_level) %>% 
+    pull(Indemnity_cpc_index_1981_base) %>% 
+    sum()
+  cpc_payout_haying <- haying_cpc_2021 %>% 
+    filter(Coverage.Level.Percent == coverage_level) %>% 
+    pull(Indemnity_cpc_index_1981_base) %>% 
+    sum()
+  cpc_payout_total <- cpc_payout_grazing + cpc_payout_haying
+})
+
+coverage_df[6,] <- c("Total", "100%", sum(coverage_df$CHIRPS_Payout), sum(coverage_df$CPC_Payout))
+
+
+coverage_df$CHIRPS_Payout <- as.numeric(coverage_df$CHIRPS_Payout)
+coverage_df$CPC_Payout <- as.numeric(coverage_df$CPC_Payout)
+
+coverage_df[["CHIRPS/CPC"]]  <- round(coverage_df[["CHIRPS_Payout"]]/coverage_df[["CPC_Payout"]], 2)
+
+
+
+coverage_df[["CHIRPS"]] <- paste0(dollar(coverage_df[["CHIRPS_Payout"]] / 1e6, accuracy = 0.1), " M")
+
+coverage_df[["CPC"]] <- paste0(dollar(coverage_df[["CPC_Payout"]] / 1e6, accuracy = 0.1), " M")
+  
+coverage_df_export <- coverage_df %>%
+  select(`Coverage_Level`, `% Enrolled`, CHIRPS, CPC, `CHIRPS/CPC`)
+
+coverage_df_export <- coverage_df_export %>%
+  rename(`Coverage Level` = Coverage_Level)
+
+xtable_output(coverage_df_export, 
+              "Tab4_coverage_level_2021",
+              "CPC and CHIRPS estimated indemnties for 2021. As coverage level decreases, the gap between CHIRPS and CPC indmenities widens.")
+
+
+```
+
+

@@ -1,0 +1,107 @@
+---
+title: "ARER Figures 2-4"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## County stats
+## Table 1
+
+```{r}
+
+
+tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+tx_counties <- st_set_crs(tx_counties, 4326)  # Example: EPSG 4326 (WGS84)
+
+tx_counties_rpj <- st_transform(tx_counties, crs = 26914)
+
+# Calculate the area of each county
+county_areas <- st_area(tx_counties_rpj)
+
+# Convert the area from square meters to square kilometers (optional)
+county_areas_km2 <- as.numeric(county_areas) / 1e6
+
+# Calculate the mean county size (in square kilometers)
+mean_county_size <- mean(county_areas_km2, na.rm = TRUE) %>% round()
+
+num_counties <- sum(!is.na(tx_counties$COUNTY))
+
+
+## mean chirps cell count
+tx_county_areas_cpc <- read.csv(here("data/tx_county-areas/cpc-county-areas.csv"))
+
+tx_counties$cpc_cell_count <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k] %>% as.numeric()
+  print(current_county_id)
+  cpc_cells <- tx_county_areas_cpc %>% 
+    filter(County.Code == current_county_id) %>% 
+    filter(Area > 0) %>% 
+    nrow()
+})
+
+mean_cpc_cell_count <- round(mean(tx_counties$cpc_cell_count))
+
+## mean chirips cell count
+tx_county_areas <- read.csv(here("data/tx_county-areas/chirps-county-areas.csv"))
+
+tx_counties$chirps_cell_count <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k] %>% as.numeric()
+  print(current_county_id)
+  chirps_cells <- tx_county_areas %>% 
+    filter(County.Code == current_county_id) %>% 
+    filter(Area > 0) %>% 
+    nrow()
+})
+
+mean_chirps_cell_count <- round(mean(tx_counties$chirps_cell_count))
+
+## county df
+
+df_labels <- c("Number of counties", "Mean county size", "Mean CPC grids per county", "Mean CHIRPS grids per county")
+df_values <- c(num_counties, paste0(mean_county_size, " km\u00B2"), mean_cpc_cell_count, mean_chirps_cell_count )
+
+county_df <- data.frame("Characteristic" = df_labels, "Value" = df_values)
+
+xtable_output(county_df, 
+              "Tab1_county_stats",
+              "Statistics on county size and # of grid cells per county.")
+
+```
+
+

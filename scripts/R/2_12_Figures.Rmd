@@ -1,0 +1,97 @@
+---
+title: "ARER Figures 2-12"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+## Figure on estimated productivity factors
+## estimated productivity factor calculated as:
+## prod_factor = liability/(acres * county_base_value)
+## Figure A.10
+
+
+```{r}
+  
+# Load data
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_cpc_index.rda"), "payouts_grazing_2021_cpc")
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_cpc_index.rda"), "payouts_haying_2021_cpc")
+
+# Compute estimated production
+payouts_grazing_2021_cpc$estimated_prod <- 
+  payouts_grazing_2021_cpc$Liability.Amount / (payouts_grazing_2021_cpc$CountyBaseValue * payouts_grazing_2021_cpc$Net.Reporting.Level.Amount)
+
+payouts_haying_2021_cpc$estimated_prod <- 
+  payouts_haying_2021_cpc$Liability.Amount / (payouts_haying_2021_cpc$CountyBaseValue * payouts_haying_2021_cpc$Net.Reporting.Level.Amount)
+
+# Combine data for consistent x-axis scale
+data_combined <- bind_rows(
+  data.frame(estimated_prod = payouts_grazing_2021_cpc$estimated_prod, type = "Grazing"),
+  data.frame(estimated_prod = payouts_haying_2021_cpc$estimated_prod, type = "Non-irrigated non-organic haying")
+)
+
+
+# Compute estimated production
+payouts_grazing_2021_cpc$estimated_prod <- 
+  payouts_grazing_2021_cpc$Liability.Amount / (payouts_grazing_2021_cpc$CountyBaseValue * payouts_grazing_2021_cpc$Net.Reporting.Level.Amount)
+
+payouts_haying_2021_cpc$estimated_prod <- 
+  payouts_haying_2021_cpc$Liability.Amount / (payouts_haying_2021_cpc$CountyBaseValue * payouts_haying_2021_cpc$Net.Reporting.Level.Amount)
+
+# Combine data for consistent x-axis and y-axis scale
+data_combined <- bind_rows(
+  data.frame(estimated_prod = payouts_grazing_2021_cpc$estimated_prod, type = "Grazing"),
+  data.frame(estimated_prod = payouts_haying_2021_cpc$estimated_prod, type = "Non-irrigated non-organic haying")
+)
+
+# Create the plots
+p <- ggplot(data_combined, aes(x = estimated_prod, y = after_stat(count) / sum(after_stat(count)), fill = type)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 14) +
+  facet_wrap(~ type, scales = "fixed") +
+  labs(x = "Estimated Productivity Factor", y = "Proportion") +
+  theme_minimal() +
+  theme(legend.position = "bottom", text = element_text(size = 14), legend.title = element_blank(), strip.text = element_blank()) + clean_chart_clutter
+
+ggsave_ol(p, 
+          "FigA10_histogram_prod_factors",  # Output file name
+          " ",
+          height = 5,  # in inches
+          width = 8   # in inches)
+)
+
+```
+

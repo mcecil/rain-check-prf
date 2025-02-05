@@ -1,0 +1,144 @@
+---
+title: "ARER workflow"
+author: Michael Cecil
+output: html_notebook
+---
+
+This notebook performs the rainfall index and payout calculations for much of the manuscript.
+It uses different spatiotemporal assumptions on the CPC and CHIRPS datasets.
+
+
+## load required libraries
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+```
+
+
+
+## CDL proportions. Calculate county proportions based on CDL data (used in place of county to CPC grid proportions)
+## outputs include a cropped and masked CDL raster for TX, 
+## and a new file like "cpc_county_areas_cdl_2023.rda" that contains a column for CDL proportions
+## this process assumes that the original CPC grid and county intersection list is correct (from "cpc-county-areas.csv")
+## THIS TAKES A WHILE
+
+
+```{r}
+
+calc_cdl_prop <- function(year){
+  
+  # Load your cdl raster and tx counties
+  r <- raster(here(paste0("data/cdl/raw/", year, "_30m_cdls/", year, "_30m_cdls.tif")))
+  cdl_names <- read.csv(here("data/cdl/raw/CDL_codes_names_colors.csv"))
+  tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+  tx_counties$County.Code <- as.numeric(tx_counties$COUNTYID)
+  sf_obj <- tx_counties
+  
+  # Reproject the tx counties to match the raster's CRS
+  sf_obj_proj <- st_transform(sf_obj, crs = crs(r))
+  
+  # Crop and mask the raster to the sf object
+  r_masked <- mask(crop(r, sf_obj_proj), sf_obj_proj)
+  
+  
+  ## write cropped and masked cdl raster
+  writeRaster(r_masked, file = here(paste0("data/outputs/cdl/cdl_tx_", year, ".tif")))
+  
+  # Get unique classes and their counts
+  class_counts <- freq(r_masked, useNA = "no") %>%
+    as.data.frame() %>%
+    rename(class = value, count = count)
+  
+  
+  # Calculate pixel area in square meters
+  pixel_area <- res(r)[1] * res(r)[2]
+  
+  # Add area and percentage columns
+  total_area <- sum(class_counts$count) * pixel_area
+  class_counts <- class_counts %>%
+    mutate(area_m2 = count * pixel_area,
+           percentage = (area_m2 / total_area) * 100)
+  
+  # Display the results
+  class_counts <- merge(class_counts, cdl_names,
+                        by.x = "class",
+                        by.y = "Codes")  %>% arrange(-count)
+  print(class_counts %>% arrange(-count))
+  
+  write.csv(class_counts, here(paste0("data/outputs/cdl/class_counts_cdl_", year, ".csv")))
+  
+  
+  
+  grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+  grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+  grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+  
+  grids_rpj <- st_transform(grids, st_crs(tx_counties))
+  
+  conflicts_prefer(raster::extract)
+  
+  cpc_county_areas <- read.csv(here("data/tx_county-areas/cpc-county-areas.csv"))
+  
+  cpc_county_areas$index <- 1:nrow(cpc_county_areas)
+ # cpc_county_areas$CDL_area2 <- NA
+  
+  a <- sapply(1:nrow(cpc_county_areas), function(row){
+    index <-cpc_county_areas$index[row] 
+    print(index)
+    cpc_grid <- cpc_county_areas$CPC.Grid.Code[row] 
+    county_id <-cpc_county_areas$County.Code[row]  
+    intersect_pred <- st_intersects(grids_rpj %>% filter(GRIDCODE == cpc_grid),
+                                    tx_counties %>% filter(County.Code == county_id))
+    # print(intersect_pred)
+    if(length(intersect_pred[[1]]) == 0){
+      cpc_county_areas$CDL_area2[index] <- 0
+      return(0)
+    }
+    intersect <- st_intersection(grids_rpj %>% filter(GRIDCODE == cpc_grid),
+                                 tx_counties %>% filter(County.Code == county_id))
+    intersect_rpj <- st_transform(intersect, crs(r_masked))
+    target_classes <- c(176, 37)
+    pixel_vals <- extract(r_masked, intersect_rpj)[[1]]
+    final_count <- sum(pixel_vals %in% target_classes, na.rm = T)
+    # print('next')
+    # print('next')
+    # print(final_count)
+    cpc_county_areas$CDL_area2[index] <- final_count
+    return(final_count)
+    
+  })
+  
+  cdl_column_name <- paste0("cdl_area_", year) 
+  
+  cpc_county_areas$cdl_area <- a
+  
+  
+  cpc_county_areas <- cpc_county_areas %>%
+    group_by(County.Code) %>%
+    mutate(Proportion_cdl = cdl_area/ sum(cdl_area))
+  
+  save(cpc_county_areas, file = here(paste0("data/outputs/cdl/cpc_county_areas_cdl_", year, ".rda")))
+  
+  print(paste0("cdl proportions for ", year, " completed"))
+}
+
+#calc_cdl_prop(2021)
+calc_cdl_prop(2022)
+#calc_cdl_prop(2023)
+
+
+```

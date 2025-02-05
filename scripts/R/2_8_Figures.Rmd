@@ -1,0 +1,276 @@
+---
+title: "ARER Figures 2-8"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Statement of business figures
+## Figure A1, A2
+
+
+### load statement of business data
+### extract policies, indemnities ($)
+
+```{r}
+
+
+state_policy_enrollment <- lapply(2007:2023, function(year){
+  print(year)
+  data_w_names <- read.csv(here("data/PRF_sob/sobcov_2024_names.csv"))
+  column_names <- colnames(data_w_names)
+  
+  year_2 <- substr(as.character(year), 3, 4)
+  data <- read.csv(here(paste0("data/PRF_sob/raw_files/sobcov", year_2, ".txt")),
+                   sep = '|')
+  names(data) <- column_names
+  
+  data_prf <- data %>%
+    filter(Commodity.Code ==  88) %>% 
+    filter(Insurance.Plan.Code == 13)
+  
+  print(unique(data_prf$Quantity.Type))
+  
+  state_sums <- data_prf %>%
+    group_by(Location.State.Abbreviation) %>%
+    summarize(total = sum(Policies.Sold.Count, na.rm = TRUE))
+  
+  state_sums$year <- year
+  
+  return(state_sums)
+  
+}) %>% do.call("rbind", .)
+
+
+state_indemnities <- lapply(2007:2023, function(year){
+  print(year)
+  data_w_names <- read.csv(here("data/PRF_sob/sobcov_2024_names.csv"))
+  column_names <- colnames(data_w_names)
+  
+  year_2 <- substr(as.character(year), 3, 4)
+  data <- read.csv(here(paste0("data/PRF_sob/raw_files/sobcov", year_2, ".txt")),
+                   sep = '|')
+  names(data) <- column_names
+  
+  data_prf <- data %>%
+    filter(Commodity.Code ==  88) %>% 
+    filter(Insurance.Plan.Code == 13)
+  
+  print(unique(data_prf$Quantity.Type))
+  
+  state_sums <- data_prf %>%
+    group_by(Location.State.Abbreviation) %>%
+    summarize(total = sum(Indemnity.Amount...., na.rm = TRUE))
+  
+  state_sums$year <- year
+  
+  return(state_sums)
+  
+}) %>% do.call("rbind", .)
+
+
+tx_percent_policies <- (state_policy_enrollment %>% filter(Location.State.Abbreviation == "TX") %>% pull(total) %>% sum())/state_policy_enrollment  %>% pull(total) %>% sum()
+
+tx_percent_indemnities <- (state_indemnities %>% filter(Location.State.Abbreviation == "TX") %>% pull(total) %>% sum())/state_indemnities  %>% pull(total) %>% sum()
+
+
+```
+
+
+
+### plot for policies by state
+
+```{r}
+
+
+all_states <- unique(state_policy_enrollment$Location.State.Abbreviation)
+years <- 2007:2023
+
+# Expand the data to ensure every state-year combination is present
+state_policy_enrollment <- state_policy_enrollment %>%
+  complete(Location.State.Abbreviation = all_states, year = years, fill = list(total = 0))
+
+state_policy_enrollment <- state_policy_enrollment %>% rename(State = Location.State.Abbreviation,
+                                                              Policies = total)
+
+state_policy_enrollment[["year"]] <- as.Date(paste0(state_policy_enrollment[["year"]], "-01-01"))
+
+
+p <- ggplot(state_policy_enrollment, aes(x = year, y = Policies/1000, group = State)) +
+  # Lines for all states except Texas
+  geom_line(data = filter(state_policy_enrollment, State != "TX"), 
+            aes(color = "Other"), 
+            size = 1, alpha = 0.5) +
+  # Texas line
+  geom_line(data = filter(state_policy_enrollment, State == "TX"), 
+            aes(color = "TX"), 
+            size = 1) +
+  # Label for Texas
+  geom_text(data = filter(state_policy_enrollment, State == "TX") %>% filter(year == median(year)), 
+            aes(label = "Texas", x = year, y = (Policies + 500)/1000 ), 
+            color = "black", size = 6, hjust = 0) +
+  # Color scale
+  scale_color_manual(values = c("TX" = "black", "Other" = "grey")) +
+  # Labels
+  labs(
+   # title = "PRF Policies by year",
+    x = "Data Source: USDA State-County-Crop Summary of Business",
+    y = "Policies (k)",
+    color = "State"
+  ) +
+  # Adjust y-axis limits
+  #ylim(0, 250) +
+  # Ensure all years are shown and text is diagonal
+  scale_x_continuous(breaks = unique(state_policy_enrollment$year)) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+  #  axis.text.x = element_text(angle = 45, hjust = 1), # Diagonal text
+    axis.title.x = element_text(hjust = 0.02, vjust = 0.2) # Left-justify x-axis label
+  ) + 
+  theme(
+  #  axis.title.x = element_blank(),        # Remove x-axis title
+    axis.title = element_text(size = 14),  # Set axis title size (x and y)
+    axis.text = element_text(size = 14),   # Set axis labels (x and y)
+    plot.title = element_text(size = 14)  # Set title size and center it
+   # legend.text = element_text(size = 14),  # Set legend item text size
+  ) + clean_chart_clutter +
+  scale_x_date(
+    breaks = seq(min(state_policy_enrollment$year), max(state_policy_enrollment$year), by = "2 years"),  
+    date_labels = "%Y", # Format the labels to show only the year
+    expand = c(0.05, 0) # Optionally remove padding
+   # limits = as.Date(c(min(df_long[["year"]]), max(df_long[["year"]] + 1))) # Ensure start and end dates are included
+  ) +
+  theme(legend.position = "none")
+    
+
+ggsave_ol(p, 
+          "FigA1_prf_policies_by_state",  # Output file name
+          "Proportion of PRF policies by state for grazing and non-irrigated haying.",
+          height = 5,  # in inches
+          width = 8   # in inches
+)
+
+
+
+```
+
+
+
+### plot for indemnities by state
+
+```{r}
+
+all_states <- unique(state_indemnities$Location.State.Abbreviation)
+years <- 2007:2023
+
+# Expand the data to ensure every state-year combination is present
+state_indemnities <- state_indemnities %>%
+  complete(Location.State.Abbreviation = all_states, year = years, fill = list(total = 0))
+
+state_indemnities <- state_indemnities %>% rename(State = Location.State.Abbreviation,
+                                                              Indemnities = total)
+
+
+state_indemnities[["year"]] <- as.Date(paste0(state_indemnities[["year"]], "-01-01"))
+
+
+# Plot the data
+p <- ggplot(state_indemnities, aes(x = year, y = Indemnities/1000000, group = State)) +
+  # Lines for all states except Texas
+  geom_line(data = filter(state_indemnities, State != "TX"), 
+            aes(color = "Other"), 
+            size = 1, alpha = 0.5) +
+  # Texas line
+  geom_line(data = filter(state_indemnities, State == "TX"), 
+            aes(color = "TX"), 
+            size = 1) +
+  # Label for Texas
+  geom_text(data = filter(state_indemnities, State == "TX") %>% filter(year == median(year)), 
+            aes(label = "Texas", x = year, y = (Indemnities/1000000) + 100), 
+            color = "black", size = 6, hjust = 0) +
+  # Color scale
+  scale_color_manual(values = c("TX" = "black", "Other" = "grey")) +
+  # Labels
+  labs(
+   # title = "PRF Indemnities by year",
+    x = "Data Source: USDA State-County-Crop Summary of Business",
+    y = "Indemnities ($M)",
+    color = "State"
+  ) +
+  # Adjust y-axis limits
+  ylim(0, 250) +
+  # Ensure all years are shown and text is diagonal
+  scale_x_continuous(breaks = unique(state_indemnities$year)) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+  #  axis.text.x = element_text(angle = 45, hjust = 1), # Diagonal text
+    axis.title.x = element_text(hjust = 0.02, vjust = 0.2) # Left-justify x-axis label
+  ) + 
+  theme(
+  #  axis.title.x = element_blank(),        # Remove x-axis title
+    axis.title = element_text(size = 14),  # Set axis title size (x and y)
+    axis.text = element_text(size = 14),   # Set axis labels (x and y)
+    plot.title = element_text(size = 14)  # Set title size and center it
+   # legend.text = element_text(size = 14),  # Set legend item text size
+  ) + clean_chart_clutter +
+  scale_x_date(
+    breaks = seq(min(state_policy_enrollment$year), max(state_policy_enrollment$year), by = "2 years"),  
+    date_labels = "%Y", # Format the labels to show only the year
+    expand = c(0.05, 0) # Optionally remove padding
+   # limits = as.Date(c(min(df_long[["year"]]), max(df_long[["year"]] + 1))) # Ensure start and end dates are included
+  ) +
+  theme(legend.position = "none")
+    
+    
+
+ggsave_ol(p, 
+          "FigA2_prf_indemnities_by_state",  # Output file name
+          "Proportion of PRF indemnties by state for grazing and non-irrigated non-organic haying.",
+          height = 5,  # in inches
+          width = 8   # in inches)
+)
+
+```
+
+
+
+
+

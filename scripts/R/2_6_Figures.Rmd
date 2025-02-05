@@ -1,0 +1,273 @@
+---
+title: "ARER Figures 2-6"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Intra-grid variation (CV)
+## Fig 2
+
+```{r}
+
+
+tx_grid_cells <- unique(chirps_data$GRIDCODE)
+
+## load CPC grids as sf object
+
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp")) %>% 
+  filter(GRIDCODE %in% tx_grid_cells)
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+grid_variation <- function(grids_df, chirps_df, col_name){
+  if(!("count" %in% colnames(grids_df))){
+    grids_df$count <- sapply(grids_df$GRIDCODE, function(x){
+      chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+      count <- nrow(chirps_cells)
+    })
+  }
+  
+ years <- 2007:2023
+
+# Replace 2021 with each year in the range
+  columns_to_cv <- sapply(years, function(y) gsub("2021", y, col_name))
+  
+  grids_df[[paste0(col_name, "_CV")]] <- sapply(grids_df$GRIDCODE, function(x){
+    chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+    all_values <- unlist(chirps_cells[ , columns_to_cv])
+    cv <- cv(all_values)
+  })
+  
+  grids_df[[paste0(col_name, "_SD")]] <- sapply(grids_df$GRIDCODE, function(x){
+    chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+    all_values <- unlist(chirps_cells[ , columns_to_cv])
+    sd <- sd(all_values)
+  })
+  return(grids_df)
+}
+
+
+grid_variation_single_year <- function(grids_df, chirps_df, col_name){
+  if(!("count" %in% colnames(grids_df))){
+    grids_df$count <- sapply(grids_df$GRIDCODE, function(x){
+      chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+      count <- nrow(chirps_cells)
+    })
+  }
+  
+ years <- 2007:2023
+ for(year in years){
+   print(year)
+   
+   # Replace 2021 with each year in the range
+   columns_to_cv <- sapply(year, function(y) gsub("2021", y, col_name))
+   
+   grids_df[[paste0(col_name, "_", year, "_CV")]] <- sapply(grids_df$GRIDCODE, function(x){
+     chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+     all_values <- unlist(chirps_cells[ , columns_to_cv])
+     cv <- cv(all_values)
+   })
+   
+   grids_df[[paste0(col_name, "_", year, "_SD")]] <- sapply(grids_df$GRIDCODE, function(x){
+     chirps_cells <- chirps_df %>% filter(GRIDCODE == x)
+     all_values <- unlist(chirps_cells[ , columns_to_cv])
+     sd <- sd(all_values)
+   })
+   
+ }
+ return(grids_df)
+
+}
+
+for(interval in 625:635){
+  print(interval)
+  column <- paste0("CHIRPS_precip_2021_", interval)
+  grids <- grid_variation(grids, chirps_data, column)
+}
+
+for(interval in 625:635){
+  print(interval)
+  column <- paste0("CHIRPS_precip_2021_", interval)
+  grids <- grid_variation_single_year(grids, chirps_data, column)
+}
+
+columns_to_check <- paste0("CHIRPS_precip_2021_", 625:635, "_CV")
+
+# Find the maximum value across these columns
+max_cv <- max((grids %>% st_drop_geometry() )[, columns_to_check], na.rm = TRUE)
+
+combined_values <- unlist((grids %>% st_drop_geometry() )[, columns_to_check])
+
+# Calculate the 5% quantile
+quantile_5 <- quantile(combined_values, probs = seq(0, 1, 0.05), na.rm = TRUE)
+
+df_long <- grids %>%
+  pivot_longer(cols = columns_to_check, names_to = "Variable", values_to = "Value")
+
+for(column in columns_to_check){
+  print(column)
+  print(mean(grids[[column]], na.rm = T))
+}
+
+save(grids, file = here("data/outputs/grids_cv_all_years.rda"))
+
+
+```
+
+
+
+### intra-grid CV plots, mean of single years
+### Fig 2 
+```{r}
+
+load(file = here("data/outputs/grids_cv_all_years.rda"))
+
+
+for(interval in 625:635){
+  print(interval)
+  columns_to_average <- paste0("CHIRPS_precip_2021_", interval, "_", 2012:2023, "_CV")
+  grids[[paste0("mean_cv_", interval)]] <- rowMeans((grids %>% st_drop_geometry())[, columns_to_average], na.rm = TRUE)
+  combined_values <- unlist((grids %>% st_drop_geometry() )[, columns_to_average])
+  print(mean(combined_values))
+  quantile_5 <- quantile(combined_values, probs = seq(0, 1, 0.05), na.rm = TRUE)
+  print(quantile_5)
+}
+
+
+month_dict <- c(
+  "625" = "Jan -\nFeb",
+  "626" = "Feb -\nMar",
+  "627" = "Mar -\nApr",
+  "628" = "Apr -\nMay",
+  "629" = "May -\nJun",
+  "630" = "Jun -\nJul",
+  "631" = "Jul -\nAug",
+  "632" = "Aug -\nSep",
+  "633" = "Sep -\nOct",
+  "634" = "Oct -\nNov",
+  "635" = "Nov -\nDec")
+
+# Set up the breaks and color palette
+
+plots <- list()
+
+columns_to_check <- paste0("mean_cv_", 625:635)
+
+# Find the maximum value across these columns
+max_cv <- max((grids %>% st_drop_geometry() )[, columns_to_check], na.rm = TRUE)
+
+
+breaks = c(0, seq(4, 12, 2), 50)  # Define breaks for bins
+color_palette <- brewer.pal(n = length(breaks) - 1, name = "Blues")  # Get the color palette
+
+labels = c(paste(breaks[-length(breaks)], "-", breaks[-1])[1:(length(breaks)-2)], "> 12")
+  
+grids <- grids %>% filter(count >= 20)
+
+  # Loop through the intervals and generate plots
+for(interval in 625:635) {  # Include the last interval
+  print(interval)
+  column_to_plot <- paste0("mean_cv_", interval)
+  
+  # Cut continuous values into bins based on the breaks
+  grids$bin <- cut(grids[[column_to_plot]], breaks = breaks, include.lowest = TRUE, labels = FALSE, right = FALSE)
+  
+  # Create a ggplot for each interval
+  p <- ggplot(grids %>% filter(count >= 20)) +
+    geom_sf(aes(fill = factor(bin)), color = NA) + # Use the binned variable for color
+    scale_fill_manual(
+      values = color_palette,
+      breaks = 1:(length(breaks) - 1), # Map to discrete bins
+      labels = labels,  # Set custom labels with ">70" for the highest bin
+      name = "Precipitation CV (%)"
+    ) +
+    theme_minimal() +
+    # Add bold annotation to the top-left corner with geom_text
+    
+    theme(
+      # Remove titles and axis text
+      plot.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid = element_blank(),
+      axis.title = element_blank(),
+      
+      
+      # Remove the legend for all plots except the last one
+      legend.position = ifelse(interval == 635, "right", "none"),
+      legend.key = element_rect(fill = color_palette),
+      legend.key.size = unit(0.8, "cm"),
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 14)
+    ) + 
+  #  clean_chart_clutter +
+    annotate(
+      "text", x = Inf, y = Inf, label = month_dict[as.character(interval)],
+      size = 5, fontface = "bold", hjust = 1.2, vjust = 1, color = "black"
+    )
+  # Add the plot to the list
+  plots[[as.character(interval)]] <- p
+}
+
+# Combine the plots using patchwork
+#combined_plot <- wrap_plots(plots, ncol = 4)  # Arrange 4 plots per row
+
+final_plot <- wrap_plots(plots, ncol = 4) + 
+  plot_layout(guides = "collect", widths = c(rep(1, 11), 0.5)) +  # Add extra space for the legend  # Collect all legends
+  theme(legend.position = "bottom",  # Position legend at the bottom
+        legend.direction = "horizontal",  # Horizontal layout for the legend
+        legend.box = "horizontal",  # Horizontal box for the legend
+        legend.box.margin = margin(10, 0, 10, 0))  # Add some margin for spacing
+
+
+
+ggsave_ol(final_plot, 
+          paste0("Fig2_intragrid_variation_single_year_mean"),  # Output file name
+          "Coefficient of variation (CV) of CHIRPS precipitation for each interval, for the years 2007-2023.",
+          height = 6,  # in inches
+          width = 14   # in inches
+)
+
+
+
+```
+
+
+

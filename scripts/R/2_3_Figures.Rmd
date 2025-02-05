@@ -1,0 +1,383 @@
+---
+title: "ARER Figures 2-3"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Figures tables for interval selection baselines
+## Figure A.8, A.9
+
+
+
+
+### all TX, all intervals,  grazing
+
+```{r}
+
+
+## all TX 
+## keep grazing and haying separate
+
+ 
+prf_df <- data.frame('year' = 2012:2023)
+
+for(interval in 625:635){
+  prf_df[[paste0("grazing_acreage_", interval)]] <- NA
+  prf_df[[paste0("haying_acreage_", interval)]] <- NA
+}
+
+data_w_names <- read.csv(here("data/PRF_tpu/tpu_names.csv"))
+column_names <- colnames(data_w_names)
+
+for(year in prf_df$year){
+  print(year)
+  row_index <- which(prf_df$year == year)
+  year_2 <- substr(as.character(year), 3, 4)
+  data <- read.csv(here(paste0("data/PRF_tpu/SOBSCCTPU", year_2, ".txt")),
+                   sep = '|')
+  
+  names(data) <- column_names
+  names(data) <- tolower(names(data))
+
+  
+  ## filter to  TX
+  data <- data %>% filter(state.abbreviation == "TX")
+  
+  
+  ## filter to PRF
+  data <- data %>% filter(commodity.code == 88)
+  
+  ## filter to grazing 
+  grazing <- data %>% filter(type.code %in% c(7, 64))
+
+  for(interval in 625:635){
+    alternate_interval <- interval - 100
+    grazing_interval <- grazing %>% filter(practice.code %in% c(interval, alternate_interval ))
+    prf_df[[paste0("grazing_acreage_", interval)]][row_index] <- sum(grazing_interval$net.reporting.level.amount)
+  }
+  
+  ## filter to haying 
+  haying <- data %>% filter(type.code %in% c(30, 63))
+
+  for(interval in 625:635){
+    alternate_interval <- interval - 100
+    haying_interval <- haying %>% filter(practice.code %in% c(interval, alternate_interval ))
+    
+    prf_df[[paste0("haying_acreage_", interval)]][row_index] <- sum(haying_interval$net.reporting.level.amount)
+  }
+}
+
+prf_df$total_grazing_acreage <- rowSums(prf_df %>% select(starts_with("grazing_acreage_") & matches("625|626|627|628|629|630|631|632|633|634|635")))
+
+prf_df$total_haying_acreage <- rowSums(prf_df %>% select(starts_with("haying_acreage_") & matches("625|626|627|628|629|630|631|632|633|634|635")))
+
+for(interval in 625:635){
+  prf_df[[paste0("grazing_pct_", interval)]] <- 100*(prf_df[[paste0("grazing_acreage_", interval)]])/ prf_df$total_grazing_acreage
+  prf_df[[paste0("haying_pct_", interval)]] <- 100*(prf_df[[paste0("haying_acreage_", interval)]])/ prf_df$total_haying_acreage
+}
+
+
+prf_df_longer <- prf_df %>% 
+  filter(year >= 2012) %>%  pivot_longer(cols = starts_with("grazing_pct_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+prf_df_longer$interval <- substr(prf_df_longer$variable,
+                                 nchar(prf_df_longer$variable) - 2,
+                                 nchar(prf_df_longer))
+
+prf_df_longer$label <- month_dict[substr(prf_df_longer$variable,
+                                         nchar(prf_df_longer$variable) - 2,
+                                         nchar(prf_df_longer))]
+
+prf_df_longer$label <- factor(prf_df_longer$label,
+                              levels = month_dict)
+
+
+
+
+```
+
+
+
+## interval selection plot with color
+## Fig A.8
+
+```{r}
+
+## all intervals
+variables_to_plot <- paste0("grazing_pct_", seq(625, 635, 1))
+
+
+p_color <- ggplot(prf_df_longer %>% filter(variable %in% variables_to_plot)) +
+  # Plot all lines in grey with alpha = 0.5
+  geom_line(aes(x = year, y = value, group = interval, color = label), alpha = 0.5, lwd = 3) +
+  # Highlight "Jan-Feb" line in black
+  # geom_line(data = prf_df_longer %>% 
+  #             filter(variable %in% variables_to_plot & label == "Jan - Feb"), 
+  #           aes(x = year, y = value, group = interval), 
+  #           color = "black", lwd = 3) +
+  # Add label near the middle of "Jan-Feb" line
+  geom_text(data = prf_df_longer %>% 
+              filter(variable %in% variables_to_plot & label == "Jan - Feb") %>%
+              filter(year == 2020), # Find middle year
+            aes(x = year, y = value + 1, label = "Jan - Feb"), 
+            size = 6, hjust = 0.5, vjust = -0.5) +
+  theme_minimal(base_size = 18) +  # Set larger base size for all text
+  theme(
+    legend.position = "bottom",      # Move legend below the plot
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 18),  # Increase legend text size
+  #  legend.spacing.y = unit(0.5, "cm"),  # Add vertical spacing between rows
+    plot.title = element_text(size = 18, face = "bold"),  # Larger title
+    axis.title = element_text(size = 18),  # Larger axis titles
+    axis.text = element_text(size = 18),    # Larger axis labels
+    axis.title.x = element_blank()
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(color = guide_legend(nrow = 3)) +  # Set two-row legend
+  scale_x_continuous(breaks = unique(prf_df_longer$year)) +  # Ensure all years are labeled
+  ylab("Interval Selection %") + 
+  xlab("") +
+  ylim(0, 20)
+
+# Display the plot
+p_color
+
+
+ggsave_ol(p_color, 
+          "FigA8_all_tx_intervals_grazing",  # Output file name
+          "Interval selection for Texas grazing",
+          height = 5,  # in inches
+          width = 8   # in inches
+)
+
+```
+
+
+## West TX, interval precip 2012-23, bar chart
+
+### load chirps data
+```{r}
+
+load(here("data/outputs/chirps_data_TX_region.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+```
+
+
+### West TX, interval precip 2012-23, bar chart
+```{r}
+
+prf_df <- data.frame('year' = 2012:2023)
+
+for(interval in 625:635){
+  prf_df[[paste0("cpc_precip_", interval)]] <- NA
+}
+
+
+for(year in prf_df$year){
+  print(year)
+  row_index <- which(prf_df$year == year)
+  for(interval in 625:635){
+    prf_df[[paste0("cpc_precip_", interval)]][row_index] <- (chirps_data %>% filter(region == 1)) [[paste0("precip_", year, ".", interval)]] %>% mean()
+  }
+}
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+
+prf_df_mean <-  as.data.frame(t(colMeans(prf_df)))
+
+prf_df_mean_long <- prf_df_mean %>%  pivot_longer(cols = starts_with("cpc_precip_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+prf_df_mean_long$interval <- substr(prf_df_mean_long$variable,
+                                 nchar(prf_df_mean_long$variable) - 2,
+                                 nchar(prf_df_mean_long))
+
+prf_df_mean_long$label <- month_dict[substr(prf_df_mean_long$variable,
+                                         nchar(prf_df_mean_long$variable) - 2,
+                                         nchar(prf_df_mean_long))]
+
+prf_df_mean_long$label <- factor(prf_df_mean_long$label,
+                              levels = month_dict)
+
+prf_df_mean_long$cv <- sapply(prf_df_mean_long$interval, function(x){
+  cv <- prf_df[[paste0("cpc_precip_", x)]] %>% cv() %>% round() %>% paste0(., "%")
+})
+
+
+
+p_west <- ggplot(prf_df_mean_long, aes(x = label, y = value, fill = label)) +  
+  geom_bar(stat = "identity", alpha = 0.5) +  
+  theme_minimal() +  
+  labs(x = NULL, y = "Mean Precip (mm)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  
+  theme(legend.position = "none",
+        text = element_text(size = 18),
+        axis.title.x = element_blank()) + 
+  geom_text(aes(label = cv, y = min(value)- 10), size = 5, vjust = 3) + # Adjust `y` offset as needed
+  scale_x_discrete(expand = expansion(mult = c(0.2, 0))) +
+  annotate("text", x = 0.5, y = min(prf_df_mean_long$value) - 10 , label = "CV:", size = 5, hjust = 1, vjust = 3, fontface = "bold") +
+  annotate("text", x = 0, y = max(prf_df_mean_long$value), 
+           label = "West Texas 2012-23", size = 6, hjust = 0, fontface = "bold")
+  
+
+
+
+```
+
+
+
+### East TX, interval precip 2012-23, bar chart
+
+```{r}
+
+prf_df <- data.frame('year' = 2012:2023)
+
+for(interval in 625:635){
+  prf_df[[paste0("cpc_precip_", interval)]] <- NA
+}
+
+
+for(year in prf_df$year){
+  print(year)
+  row_index <- which(prf_df$year == year)
+  for(interval in 625:635){
+    prf_df[[paste0("cpc_precip_", interval)]][row_index] <- (chirps_data %>% filter(region == 2)) [[paste0("precip_", year, ".", interval)]] %>% mean()
+  }
+}
+
+prf_df_mean <-  as.data.frame(t(colMeans(prf_df)))
+
+prf_df_mean_long <- prf_df_mean %>%  pivot_longer(cols = starts_with("cpc_precip_"), # Select columns to pivot
+                                          names_to = "variable",                  # New column for variable names
+                                          values_to = "value"   )
+
+prf_df_mean_long$interval <- substr(prf_df_mean_long$variable,
+                                 nchar(prf_df_mean_long$variable) - 2,
+                                 nchar(prf_df_mean_long))
+
+prf_df_mean_long$label <- month_dict[substr(prf_df_mean_long$variable,
+                                         nchar(prf_df_mean_long$variable) - 2,
+                                         nchar(prf_df_mean_long))]
+
+prf_df_mean_long$label <- factor(prf_df_mean_long$label,
+                              levels = month_dict)
+
+prf_df_mean_long$cv <- sapply(prf_df_mean_long$interval, function(x){
+  cv <- prf_df[[paste0("cpc_precip_", x)]] %>% cv() %>% round() %>% paste0(., "%")
+})
+
+p_east <- ggplot(prf_df_mean_long, aes(x = label, y = value, fill = label)) +  
+  geom_bar(stat = "identity", alpha = 0.5) +  
+  theme_minimal() +  
+  labs(x = NULL, y = "Mean Precip (mm)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  
+  theme(legend.position = "none",
+        text = element_text(size = 18),
+        axis.title.x = element_blank()) + 
+  geom_text(aes(label = cv, y = min(value) - 74), size = 5, vjust = 3) + # Adjust `y` offset as needed
+  scale_x_discrete(expand = expansion(mult = c(0.2, 0))) +
+  annotate("text", x = 0.5, y = min(prf_df_mean_long$value) - 74, label = "CV:", size = 5, hjust = 1, vjust = 3, fontface = "bold") +
+  annotate("text", x = 0, y = max(prf_df_mean_long$value), 
+           label = "East Texas 2012-23", size = 6, hjust = 0, fontface = "bold") 
+  
+
+
+```
+
+
+### Combined plot
+### Fig A.9
+```{r}
+
+p <- plot_grid(
+  p_west + theme(legend.justification = c(0, 0), legend.position = "none") , 
+  p_east  ,  # Remove y-axis label
+ # labels = c("A", "B"),  # Add labels to each plot
+  label_size = 16,  # Adjust label size
+  label_fontface = "bold",  # Make labels bold
+  label_x = 0.28,  # Adjust horizontal position (0 = left, 1 = right)
+  label_y = 0.95, # Move label lower (1 = top, 0 = bottom)
+  align = 'vh',
+  hjust = -1,
+  nrow = 2
+)
+
+
+ggsave_ol(p, 
+          "FigA9_mean_precip_by_interval",  # Output file name
+          "Mean precipitation by interval for West and East Texas, 2012-23.",
+          height = 10,  # in inches
+          width = 9   # in inches
+)
+
+```
+

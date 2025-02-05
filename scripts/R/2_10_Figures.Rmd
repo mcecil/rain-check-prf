@@ -1,0 +1,144 @@
+---
+title: "ARER Figures 2-10"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Coverage level by year
+## Figure A.6
+
+
+
+### Coverage level by year, Liability ($) by year, US
+
+```{r}
+
+
+year_df <- data.frame(Year = 2007:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  data_w_names <- read.csv(here("data/PRF_sob/sobcov_2024_names.csv"))
+  column_names <- colnames(data_w_names)
+  
+  year_2 <- substr(as.character(year), 3, 4)
+  data <- read.csv(here(paste0("data/PRF_sob/raw_files/sobcov", year_2, ".txt")),
+                   sep = '|')
+  names(data) <- column_names
+  
+  data_prf <- data %>%
+    filter(Commodity.Code ==  88) %>% 
+    filter(Insurance.Plan.Code == 13) 
+  
+  data_prf$Liability_Amount <- data_prf[["Liability.Amount...."]]
+  
+  year_df$total_liability[k] <- sum(data_prf$Liability_Amount, na.rm = T)
+  year_df$total_liability_70[k] <- sum(data_prf %>% filter(Coverage.Level == 0.70) %>% pull(`Liability_Amount`), na.rm = T)
+  year_df$total_liability_75[k] <- sum(data_prf %>% filter(Coverage.Level == 0.75) %>% pull(Liability_Amount), na.rm = T)
+  year_df$total_liability_80[k] <- sum(data_prf %>% filter(Coverage.Level == 0.80) %>% pull(Liability_Amount), na.rm = T)
+  year_df$total_liability_85[k] <- sum(data_prf %>% filter(Coverage.Level == 0.85) %>% pull(Liability_Amount), na.rm = T)
+  year_df$total_liability_90[k] <- sum(data_prf %>% filter(Coverage.Level == 0.90) %>% pull(Liability_Amount), na.rm = T)
+  year_df$total_liability_other[k] <- sum(data_prf %>% filter(Coverage.Level < 0.70) %>% pull(Liability_Amount), na.rm = T)
+}
+
+year_df$proportion_70 <- year_df$total_liability_70/year_df$total_liability
+year_df$proportion_75 <- year_df$total_liability_75/year_df$total_liability
+year_df$proportion_80 <- year_df$total_liability_80/year_df$total_liability
+year_df$proportion_85 <- year_df$total_liability_85/year_df$total_liability
+year_df$proportion_90 <- year_df$total_liability_90/year_df$total_liability
+
+
+df_long <- year_df %>%
+  pivot_longer(
+    cols = starts_with("proportion"), # Select all columns starting with "proportion"
+    names_to = "proportion",          # New column for the names (proportion_70, proportion_75, etc.)
+    values_to = "value"               # New column for the values
+  )
+
+colors <- brewer.pal(5, "Set1")  # 5 colors from Set1 palette
+
+df_long$Year <- as.Date(paste0(df_long$Year, "-01-01"))
+
+# Plot using geom_line
+p <- ggplot(df_long, aes(x = Year, y = value, color = proportion, group = proportion)) +
+  geom_line(lwd = 1) +
+  labs(y = "Proportion\nLiability") +
+  theme_minimal() +
+  scale_color_manual(
+     values = setNames(colors, c("proportion_70", "proportion_75", "proportion_80", 
+                                "proportion_85", "proportion_90")),  # Assign the Set1 colors
+    
+    labels = c("proportion_70" = "70%", "proportion_75" = "75%", "proportion_80" = "80%",
+               "proportion_85" = "85%", "proportion_90" = "90%"),  # Format legend labels as percentages
+    name = "Coverage\n    Level"  # Add title to the legend
+  )  +
+  theme(text = element_text(size = 16),
+        axis.title.x = element_blank()) +
+  theme(
+    text = element_text(size = 16),
+    legend.position = "bottom",  # Position the legend below the plot
+    legend.box.spacing = unit(0.5, "cm"),  # Add some space between the plot and legend
+    legend.text = element_text(size = 16),  # Increase legend text size
+  ) + 
+  theme(axis.title.y = element_text(hjust = 0.5)) +
+  clean_chart_clutter + 
+  scale_x_date(
+    breaks = seq(min(df_long$Year), max(df_long$Year), by = "2 years"),  
+    date_labels = "%Y", # Format the labels to show only the year
+    expand = c(0.05, 0) # Optionally remove padding
+  ) + #
+  theme(axis.text.x = element_text(size = 16),  # Increase x-axis text size
+    axis.text.y = element_text(size = 16) ) 
+
+
+
+
+
+ggsave_ol(p, 
+          "FigA6_coverage_level_by_year_US",  # Output file name
+          "Proportion of PRF liability in US enrolled in different coverage levels.",
+          height = 5,  # in inches
+          width = 8   # in inches)
+)
+
+
+```
+

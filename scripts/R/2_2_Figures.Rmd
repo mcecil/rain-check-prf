@@ -1,0 +1,258 @@
+---
+title: "ARER Figures 2-2"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Figures tables for use type breakdown
+## Figure A.7
+
+## Summary stats, % breakdown of use type
+
+```{r}
+
+year_df <- data.frame(year = 2007:2023)
+
+for(year in 2023:2007){
+  print(year)
+  row_index <- which(year_df$year == year)
+  year_2 <- substr(year, 3, 4)
+  tpu_names <- read.csv(here("data/PRF_tpu/tpu_names.csv"))
+  tpu <- read.csv(here(paste0("data/PRF_tpu/SOBSCCTPU", year_2, ".TXT")), sep = "|", header = F)
+  names(tpu) <- names(tpu_names)
+  
+  tpu_prf <- tpu %>% 
+    filter(State.Abbreviation == "TX") %>% 
+    filter(Insurance.Plan.Abbreviation == "RI") %>% 
+    filter(Liability.Amount > 0) %>% 
+    filter(Commodity.Code == 88) %>% ## for PRF
+   # filter(Type.Name == use_type) %>% 
+    filter(Reporting.Level.Type == "Acres") 
+  
+  print(nrow(tpu_prf))
+  
+  tpu_prf <- tpu %>% 
+    filter(State.Abbreviation == "TX") %>% 
+  #  filter(Insurance.Plan.Abbreviation == "RI") %>% 
+    filter(Liability.Amount > 0) %>% 
+    filter(Commodity.Code == 88) %>% ## for PRF
+   # filter(Type.Name == use_type) %>% 
+    filter(Reporting.Level.Type == "Acres") 
+  
+  print(nrow(tpu_prf))
+
+  
+  print(unique(tpu_prf$Type.Name))
+  print(unique(tpu_prf$Practice.Code))
+  print(unique(tpu_prf$Practice.Name))
+  
+}
+
+
+year_df <- data.frame(year = 2023:2007)
+
+
+
+for(year in year_df$year){
+  print(year)
+  row_index <- which(year_df$year == year)
+  year_2 <- substr(year, 3, 4)
+  tpu_names <- read.csv(here("data/PRF_tpu/tpu_names.csv"))
+  tpu <- read.csv(here(paste0("data/PRF_tpu/SOBSCCTPU", year_2, ".TXT")), sep = "|", header = F)
+  names(tpu) <- names(tpu_names)
+  
+  tpu_prf <- tpu %>% 
+    filter(State.Abbreviation == "TX") %>% 
+  #  filter(Insurance.Plan.Abbreviation == "RI") %>% 
+    filter(Liability.Amount > 0) %>% 
+    filter(Commodity.Code == 88) %>% ## for PRF
+   # filter(Type.Name == use_type) %>% 
+    filter(Reporting.Level.Type == "Acres") 
+  
+  tpu_prf$use_type <- substring(tpu_prf$Practice.Name, 11)
+  
+  ## different processing needed pre and post 2016
+  if(year >= 2016){
+    tpu_prf$use_type <- substring(tpu_prf$Practice.Name, 11)
+
+    use_type_dict <- c("Index Interval" = "Grazing" ,
+                       "Index Interval (Non-Irrigated)" = "Haying (Non-Irrigated)",
+                       "Index Interval (Irrigated)" = "other",
+                       "Index Interval (Non-Irr) (OT)" = "other",
+                       "Index Interval (Non-Irr) (OC)" = "other",
+                       "Index Interval (Irr) (OC)" = "other",
+                       "Index Interval (Irr) (OT)" = "other" )
+    tpu_prf$use_type <- use_type_dict[tpu_prf$use_type]
+  }
+  
+  ## different processing needed pre and post 2016
+  if(year <= 2015){
+    
+    tpu_prf$use_type <- str_to_title(str_replace_all(tpu_prf$Type.Name, "\\s+", ""))
+    
+    use_type_dict <- c("Grazing" = "Grazing",
+                       "Haying" = "Haying (Non-Irrigated)",
+                       "Grazingland" = "Grazing" ,
+                       "Hayland" = "Haying (Non-Irrigated)")
+    tpu_prf$use_type <- use_type_dict[tpu_prf$use_type]
+  }
+  
+  group_sums <- tpu_prf %>%
+    group_by(use_type) %>%
+    summarize(total = sum(Net.Reporting.Level.Amount , na.rm = TRUE), .groups = "drop")
+  
+  # add "Other" with 0 sum if it doesn't exist
+  if (!"other" %in% group_sums$use_type) {
+    group_sums <- bind_rows(group_sums, tibble(use_type = "other", total = 0))
+  }
+  
+  group_sums$percent <- 100* (group_sums$total/sum(group_sums$total))
+  
+  year_df$grazing_pct_acres[row_index] <- group_sums %>% 
+    filter(use_type == "Grazing") %>% 
+    pull(percent)
+  year_df$haying_pct_acres[row_index] <- group_sums %>% 
+    filter(use_type == "Haying (Non-Irrigated)") %>% 
+    pull(percent)
+  year_df$other_pct_acres[row_index] <- group_sums %>% 
+    filter(use_type == "other") %>% 
+    pull(percent)
+  
+  ## Liability $
+  
+  group_sums <- tpu_prf %>%
+    group_by(use_type) %>%
+    summarize(total = sum(Liability.Amount , na.rm = TRUE), .groups = "drop")
+  
+  if (!"other" %in% group_sums$use_type) {
+    group_sums <- bind_rows(group_sums, tibble(use_type = "other", total = 0))
+  }
+  
+  group_sums$percent <- 100* (group_sums$total/sum(group_sums$total))
+  
+  year_df$grazing_pct_liability[row_index] <- group_sums %>% 
+    filter(use_type == "Grazing") %>% 
+    pull(percent)
+  year_df$haying_pct_liability[row_index] <- group_sums %>% 
+    filter(use_type == "Haying (Non-Irrigated)") %>% 
+    pull(percent)
+  year_df$other_pct_liability[row_index] <- group_sums %>% 
+    filter(use_type == "other") %>% 
+    pull(percent)
+}
+
+
+
+
+```
+
+
+## Figure A.7
+## Plot of Liability ($) breakdown for use type
+
+```{r}
+
+## plot for $ breakdown
+
+df_long <- year_df %>%
+  pivot_longer(
+    cols = c("grazing_pct_liability",
+             "haying_pct_liability",
+             "other_pct_liability"),  # Columns for y values
+    names_to = "group",           # New column for group names
+    values_to = "value"           # New column for y values
+  )
+
+df_long$value <- df_long$value /100
+
+df_long[["year"]] <- as.Date(paste0(df_long[["year"]], "-01-01"))
+
+
+colors <- brewer.pal(3, "Set1")  # 5 colors from Set1 palette
+
+
+# Plot with ggplot
+p <- ggplot(df_long, aes(x = year, y = value, color = group)) +
+  geom_line(lwd = 1) +   # Lines for each group
+  labs(
+    y = "Proportion\nLiability",
+    color = "Test"
+  ) +
+  theme_minimal() +
+  scale_color_manual(
+    values = setNames(colors, c("grazing_pct_liability", "haying_pct_liability", "other_pct_liability")), 
+    labels = c(
+      "grazing_pct_liability" = "Grazing",
+      "haying_pct_liability" = "Haying\n(non-irrigated,\nnon-organic)",
+      "other_pct_liability" = "Other"
+    ),
+    name = "Use Type"  # Add title to the legend
+  ) +
+  theme(text = element_text(size = 16),
+        axis.title.x = element_blank()) +
+  theme(
+    text = element_text(size = 16),
+    legend.position = "bottom",  # Position the legend below the plot
+    legend.box.spacing = unit(0.5, "cm"),  # Add some space between the plot and legend
+    legend.text = element_text(size = 16),  # Increase legend text size
+  ) + 
+  theme(axis.title.y = element_text(hjust = 0.5)) +
+  clean_chart_clutter + 
+  scale_x_date(
+    breaks = seq(min(df_long$year), max(df_long$year), by = "2 years"),  
+    date_labels = "%Y", # Format the labels to show only the year
+    expand = c(0.05, 0) # Optionally remove padding
+  ) + ylim(0,1) +
+  theme(axis.text.x = element_text(size = 16),  # Increase x-axis text size
+    axis.text.y = element_text(size = 16) ) 
+
+
+
+ggsave_ol(p, 
+          "FigA7_use_type_percents",  # Output file name
+          "Use type breakdown for PRF program since 2016. The \"Other\" category represents organic, transitional, and/or irrigated haying.",
+          height = 6,  # in inches
+          width = 8   # in inches
+)
+
+
+
+```
+
+

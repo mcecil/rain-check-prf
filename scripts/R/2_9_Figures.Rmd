@@ -1,0 +1,255 @@
+---
+title: "ARER Figures 2-9"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Examining CHIRPS and CPC Payouts
+## Table 5
+## Figure A.5
+
+
+## Examine why CHIRPS payouts are lower (2021)
+## Table 5
+```{r}
+
+load_rda_to_variable("/Users/mjcecil/Documents/GitHub/prf-ri/data/outputs/payouts/tpu_Grazing_2021_cpc_index_1981_base.rda", "tpu_cpc")
+
+load_rda_to_variable("/Users/mjcecil/Documents/GitHub/prf-ri/data/outputs/payouts/tpu_Grazing_2021_chirps_index.rda", "tpu_chirps")
+
+tpu_cpc$indemnity_cpc <- tpu_cpc$Indemnity_cpc_index_1981_base
+tpu_cpc$indemnity_chirps <- tpu_chirps$Indemnity_CHIRPS_index
+
+
+# Classify observations into groups
+tpu_cpc <- tpu_cpc %>%
+  mutate(
+    group = case_when(
+      indemnity_chirps == 0 & indemnity_cpc == 0 ~ "Both do not pay",
+      indemnity_chirps == 0 & indemnity_cpc > 0 ~ "CPC only pays",
+      indemnity_cpc == 0 & indemnity_chirps > 0 ~ "CHIRPS only pays",
+      indemnity_chirps > 0 & indemnity_cpc > 0 & indemnity_chirps >= indemnity_cpc ~ "Both pay, CHIRPS higher",
+      indemnity_chirps > 0 & indemnity_cpc > 0 & indemnity_cpc > indemnity_chirps ~ "Both pay, CPC higher"
+    )
+  )
+
+# Summarize data for each group
+summary <- tpu_cpc %>%
+  group_by(group) %>%
+  summarise(
+    count = n(),
+    sum_indemnity_chirps = sum(indemnity_chirps),
+    sum_indemnity_cpc = sum(indemnity_cpc),
+    diff_sum = sum(indemnity_chirps) - sum(indemnity_cpc),
+    .groups = "drop"
+  )
+
+
+ tpu_cpc %>%
+  distinct(County.Code, Coverage.Level.Percent, Practice.Name) %>%
+  nrow()
+
+# View the summary
+names(summary) <- c("", "Count", "CHIRPS ($)", "CPC ($)", "(CHIRPS - CPC)")
+
+print(sum(summary$`(CHIRPS - CPC)`))
+
+summary <- rbind(
+  summary,
+  c("Total", colSums(summary[-1]))
+)
+
+
+# Convert numeric columns back from character
+summary[-1] <- lapply(summary[-1], as.numeric)
+
+
+summary[["CHIRPS ($)"]] <- sapply(summary[["CHIRPS ($)"]], function(x)  paste0("$", round(x / 1000000, 1), " M"))
+summary[["CPC ($)"]] <- sapply(summary[["CPC ($)"]], function(x)  paste0("$", round(x / 1000000, 1), " M"))
+summary[["(CHIRPS - CPC)"]] <- sapply(summary[["(CHIRPS - CPC)"]], function(x)  paste0("$", round(x / 1000000, 1), " M"))
+
+print(summary)
+
+xtable_output(summary, 
+              "Tab5_payout_groups",
+              "Estimated magnitude of 2021 indemnities for combinations of CPC and CHIRPS payouts.")
+
+
+
+
+```
+
+
+## ECDFs
+## Figure A.5
+```{r}
+
+## cumulative distribution of payout calculation factors
+threshold <- 0.9
+# Example data frame
+
+for(year in 2021:2023){
+
+  intervals <- 625:635
+  
+  chirps_columns <- c(paste0("CHIRPS_index_", year, "_", intervals),
+                      paste0("cpc_index_1981_base_", year, "_", intervals))
+  
+  df <- chirps_data %>% select(all_of(chirps_columns))
+  
+  # Filter values < 0.9 and compute cumulative distributions for both columns
+  data_cdf <- df %>%
+    pivot_longer(cols = everything(), names_to = "column", values_to = "value") %>%
+    filter(value < threshold) %>%
+    group_by(column) %>%
+    arrange(value) %>%
+    mutate(cdf = cumsum(value) / sum(value))  # Calculate cumulative distribution
+  
+  data_cdf <- data_cdf %>%
+    mutate(Interval = substr(column, nchar(column) - 2, nchar(column))) %>% 
+    mutate(type =  toupper(sub("_.*", "", column)))
+    
+  # Plot cumulative distributions
+  p <- ggplot(data_cdf, aes(x = value, y = cdf, color = type)) +
+    geom_line(size = 1) +
+    labs(title = paste0("Cumulative Distribution ", year, ", interval ", k),
+         y = "Cumulative %",
+         color = "Column") +
+    theme_minimal() + 
+    theme(legend.position = "bottom") +
+    facet_wrap(~ Interval, nrow = 2) +  # Arrange facets in 2 rows
+    theme(legend.title = element_blank(),
+          axis.title.x = element_blank()) +  # Remove x-axis label
+    scale_x_continuous(breaks = c(0, 0.3, 0.6, 0.9),  # Custom tick positions
+                       labels = c("0", ".3", ".6", ".9")) +  # Custom tick labels
+    labs(title = paste0(year, " cumulative distribution %"))
+
+  ggsave_ol(p, 
+          paste0("ecdf_examples_", year),  # Output file name
+          ".",
+          height = 3,  # in inches
+          width = 8)   # in inches
+
+}
+
+
+
+
+```
+
+
+
+```{r}
+
+
+load(here("data/outputs/chirps_data_TX_region.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+month_dict <- c(
+  "625" = "Jan - Feb",
+  "626" = "Feb - Mar",
+  "627" = "Mar - Apr",
+  "628" = "Apr - May",
+  "629" = "May - Jun",
+  "630" = "Jun - Jul",
+  "631" = "Jul - Aug",
+  "632" = "Aug - Sep",
+  "633" = "Sep - Oct",
+  "634" = "Oct - Nov",
+  "635" = "Nov - Dec")
+
+threshold <- 0.9
+
+all_plots <- list()  # Store plots in a list
+
+for(year in 2021:2023){
+
+  intervals <- 625:635
+  
+  chirps_columns <- c(paste0("CHIRPS_index_", year, "_", intervals),
+                      paste0("cpc_index_1981_base_", year, "_", intervals))
+  
+  df <- chirps_data %>% select(all_of(chirps_columns))
+  
+  # Filter values < 0.9 and compute cumulative distributions for both columns
+  data_cdf <- df %>%
+    pivot_longer(cols = everything(), names_to = "column", values_to = "value") %>%
+    filter(value < threshold) %>%
+    group_by(column) %>%
+    arrange(value) %>%
+    mutate(cdf = cumsum(value) / sum(value))  # Calculate cumulative distribution
+  
+  data_cdf <- data_cdf %>%
+    mutate(Interval = substr(column, nchar(column) - 2, nchar(column))) %>% 
+    mutate(type = toupper(sub("_.*", "", column)))
+    
+  # Plot cumulative distributions
+  p <- ggplot(data_cdf, aes(x = value, y = cdf, color = type)) +
+    geom_line(size = 1) +
+    labs(title = year,
+         y = "Cumulative %") +  # Remove legend title
+    theme_minimal() + 
+    theme(legend.position = "bottom",
+          legend.title = element_blank(),
+          legend.text = element_text(size = 14),  # Increase legend text size
+          strip.text = element_text(size = 14),
+          plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+          axis.title.x = element_blank()) +  # Remove x-axis label
+    facet_wrap(~ Interval, nrow = 2, labeller = as_labeller(month_dict)) +  # Arrange facets in 2 rows
+    scale_x_continuous(breaks = c(0, 0.3, 0.6, 0.9),  # Custom tick positions
+                       labels = c("0", ".3", ".6", ".9")) +  # Custom tick labels
+    labs(title = year)
+
+  all_plots[[as.character(year)]] <- p  # Store each plot in the list
+}
+
+# Combine plots using patchwork and keep only one legend
+final_plot <- (all_plots[["2021"]] / all_plots[["2022"]] / all_plots[["2023"]]) + 
+  plot_layout(guides = "collect") & theme(legend.position = "bottom")
+
+# Save final plot as a single file
+ggsave(here("data/outputs/figures/FigA5_ecdf_combined_plot.png"), final_plot, width = 10, height = 9, dpi = 300)
+
+
+
+```
+
+

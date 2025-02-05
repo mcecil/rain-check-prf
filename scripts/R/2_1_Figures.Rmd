@@ -1,0 +1,632 @@
+---
+title: "ARER Figures 2-1"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Figures tables for precipitation baselines, East and West TX
+## Figure A.3, A.4
+
+
+### East vs West Texas classification (counties)
+
+```{r}
+
+tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+tx_counties <- st_set_crs(tx_counties, 4326)  # Example: EPSG 4326 (WGS84)
+  
+koppen_grid <- raster(here("data/koppen-climate-classification/koppen_ics/w001001.adf"))
+
+tx_counties_rpj <- st_transform(tx_counties, crs = crs(koppen_grid))
+
+## get unique classifications in TX
+summary_stats <- exact_extract(koppen_grid, tx_counties_rpj %>% st_union(), function(values, coverage_fraction) {
+    table(values)
+}, progress = TRUE)
+
+## 1 value is for "B" classifications (arid) 
+## 2 value is for "C" classification (temperate)
+reclass_df <- data.frame(c(7, 8, 15, 18, 22, 23),
+                         c(1, 1, 2, 2, 2, 2))
+koppen_grid_rcl <- reclassify(koppen_grid, rcl = as.matrix(reclass_df))
+
+## extract values for TX counties
+summary_stats_rcl <- exact_extract(
+    koppen_grid_rcl,
+    tx_counties_rpj,
+    function(values, coverage_fraction) {
+        tbl <- table(values)
+        as.numeric(names(tbl)[which.max(tbl)])
+    },
+    progress = TRUE
+)
+
+tx_counties_rpj$region <- summary_stats_rcl
+tx_counties$region <- summary_stats_rcl
+
+east_tx_county_codes <- tx_counties %>% filter(region == 2) %>% pull(COUNTYID) %>% as.numeric()
+west_tx_county_codes <- tx_counties %>% filter(region == 1) %>% pull(COUNTYID) %>% as.numeric()
+
+plot(tx_counties_rpj['region'])
+
+```
+
+
+### East vs West Texas classification (CPC grids)
+
+```{r}
+
+## for CPC grids
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+# monthly_averages_merge <- merge(grids, monthly_averages,
+#                           by = c("lon", "lat"))
+
+
+
+## filter to TX grid cells
+year <- 2023
+tx_grid_ids <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"), full.names = T) %>%
+  first() %>% read.csv() %>% pull(GRIDCODE) %>% unique()
+
+tx_grids <- grids %>% filter(GRIDCODE %in% tx_grid_ids)
+plot(tx_grids)
+
+tx_grids_rpj <- st_transform(tx_grids, crs(koppen_grid))
+
+## get unique classifications in TX grids
+summary_stats <- exact_extract(koppen_grid, tx_grids_rpj %>% st_union(), function(values, coverage_fraction) {
+    table(values)
+}, progress = TRUE)
+
+reclass_df <- data.frame(c(7, 8, 15, 18, 19,  22, 23),
+                         c(1, 1, 2, 2, 2, 2, 2))
+koppen_grid_rcl <- reclassify(koppen_grid, rcl = as.matrix(reclass_df))
+
+## extract values for TX grids
+summary_stats_rcl <- exact_extract(
+    koppen_grid_rcl,
+    tx_grids_rpj,
+    function(values, coverage_fraction) {
+        tbl <- table(values)
+        as.numeric(names(tbl)[which.max(tbl)])[1]
+    },
+    progress = TRUE
+)
+
+tx_grids_rpj$region <- summary_stats_rcl
+tx_grids_rpj[tx_grids_rpj$GRIDCODE == 9719, "region"] <- 1
+tx_grids_rpj[tx_grids_rpj$GRIDCODE %in%  c(7932, 8832, 9433), "region"] <- 2
+
+plot(tx_grids_rpj["region"])
+
+
+```
+
+
+## Figure A.3
+```{r}
+
+tx_outline <- st_union(tx_counties) %>% st_transform(., crs = st_crs(tx_grids_rpj))
+
+# Custom labels for the legend
+legend_labels <- c("West Texas", "East Texas")
+
+# Open a PNG graphics device
+png(
+  filename = here("data/outputs/figures/FigA3_tx_regions.png"),
+  width = 6,    # Width in inches
+  height = 6,  # Height in inches
+  units = "in",
+  res = 600         # Resolution in DPI
+)
+
+# Plot the sf object with customized legend
+plot(
+  tx_grids_rpj["region"],
+  key.pos = 4,  # Position the legend (default is right of the plot)
+  key.length = 1,  # Adjust the length of the legend
+  key.width = 1,   # Adjust the width of the legend
+  pal = colorRampPalette(c("blue", "green")),  # Define a color palette
+  reset = FALSE   # Prevent resetting the plot window
+)
+
+plot(
+  tx_outline,
+  add = TRUE,      # Overlay on the existing plot
+  border = "red",  # Set the border color to red
+  lwd = 2          # Adjust the line width
+)
+
+
+# Add custom legend
+legend(
+  "topright",  # Position of the legend
+  legend = legend_labels,  # Custom labels
+  fill = colorRampPalette(c("blue", "green"))(2),  # Colors corresponding to labels
+  title = "Region",
+  bty = "n",  # Remove the legend box,
+  cex = 0.8
+)
+
+  
+  # Close the graphics device
+dev.off()
+
+
+```
+
+
+### add region column to chirps data
+```{r}
+
+load(here("data/outputs/chirps_data_TX_ri.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+chirps_data <- merge(chirps_data, tx_grids_rpj %>% select(GRIDCODE, region),
+                     by = "GRIDCODE") 
+
+## save chirps data file with region for use in later plots
+save(chirps_data, file = here("data/outputs/chirps_data_TX_region.rda"))
+
+```
+
+
+## Calculate baseline yearly precipitation
+### Create new columns for yearly precipitation
+```{r}
+# Define suffixes to match (6 intervals, Jan-Feb, March-April)
+# sum of 6 intervals is yearly precip
+suffixes <- c("625", "627", "629", "631", "633", "635")
+
+# Loop through the years and create new columns 
+for (year in 1981:2023) {
+  # Construct pattern to match columns for the specific year
+  pattern <- paste0("CHIRPS_precip_", year, "_(", paste(suffixes, collapse = "|"), ")$")
+  
+  # Select relevant columns
+  matching_cols <- grep(pattern, names(chirps_data), value = TRUE)
+  
+  # Sum the columns and add the new column
+  chirps_data[[paste0("CHIRPS_precip_", year)]] <- rowSums(chirps_data[, matching_cols], na.rm = TRUE)
+}
+
+for (year in 1981:2023) {
+  # Construct pattern to match columns for the specific year
+  pattern <- paste0("^precip_", year, ".(", paste(suffixes, collapse = "|"), ")$")
+  
+  # Select relevant columns
+  matching_cols <- grep(pattern, names(chirps_data), value = TRUE)
+  
+  # Sum the columns and add the new column
+  chirps_data[[paste0("CPC_precip_", year)]] <- rowSums(chirps_data[, matching_cols], na.rm = TRUE)
+}
+
+```
+
+### Some stats for response
+### Mean precip during baseline (1981-2010), program (2012-23) years for E/W TX
+```{r}
+
+cpc_baseline_columns <- paste0("CPC_precip_", 1981:2010)
+cpc_program_columns <- paste0("CPC_precip_", 2012:2023)
+chirps_baseline_columns <- paste0("CHIRPS_precip_", 1981:2010)
+chirps_program_columns <- paste0("CHIRPS_precip_", 2012:2023)
+
+years <- 2012:2023
+numbers <- 625:635
+
+# Generate the vector of strings
+cpc_program_ri_columns <- as.vector(outer(years, numbers, function(y, n) paste0("cpc_index_", y, "_", n)))
+chirps_program_ri_columns <- as.vector(outer(years, numbers, function(y, n) paste0("CHIRPS_index_", y, "_", n)))
+
+
+west_tx_mean_baseline_precip_cpc <- chirps_data %>% 
+  filter(region == 1) %>% 
+  select(all_of(cpc_baseline_columns)) %>% unlist() %>% mean(., na.rm = T)
+west_tx_mean_baseline_precip_chirps <- chirps_data %>% 
+  filter(region == 1) %>% 
+  select(all_of(chirps_baseline_columns)) %>% unlist() %>% mean(., na.rm = T)
+west_tx_mean_program_precip_cpc <- chirps_data %>% 
+  filter(region == 1) %>% 
+  select(all_of(cpc_program_columns)) %>% unlist() %>% mean(., na.rm = T)
+west_tx_mean_program_precip_chirps <- chirps_data %>% 
+  filter(region == 1) %>% 
+  select(all_of(chirps_program_columns)) %>% unlist() %>% mean(., na.rm = T)
+  
+east_tx_mean_baseline_precip_cpc <- chirps_data %>% 
+  filter(region == 2) %>% 
+  select(all_of(cpc_baseline_columns)) %>% unlist() %>% mean(., na.rm = T)
+east_tx_mean_baseline_precip_chirps <- chirps_data %>% 
+  filter(region == 2) %>% 
+  select(all_of(chirps_baseline_columns)) %>% unlist() %>% mean(., na.rm = T)
+east_tx_mean_program_precip_cpc <- chirps_data %>% 
+  filter(region == 2) %>% 
+  select(all_of(cpc_program_columns)) %>% unlist() %>% mean(., na.rm = T)
+east_tx_mean_program_precip_chirps <- chirps_data %>% 
+  filter(region == 2) %>% 
+  select(all_of(chirps_program_columns)) %>% unlist() %>% mean(., na.rm = T)
+
+
+west_tx_mean_program_ri_cpc <- chirps_data %>% 
+  filter(region == 1) %>% 
+  select(all_of(cpc_program_ri_columns)) %>% unlist() %>% mean(., na.rm = T)
+west_tx_mean_program_ri_chirps <- chirps_data %>% 
+  filter(region == 1) %>% 
+  select(all_of(chirps_program_ri_columns)) %>% unlist() %>% mean(., na.rm = T)
+east_tx_mean_program_ri_cpc <- chirps_data %>% 
+  filter(region == 2) %>% 
+  select(all_of(cpc_program_ri_columns)) %>% unlist() %>% mean(., na.rm = T)
+east_tx_mean_program_ri_chirps <- chirps_data %>% 
+  filter(region == 2) %>% 
+  select(all_of(chirps_program_ri_columns)) %>% unlist() %>% mean(., na.rm = T)
+
+
+
+
+```
+
+
+
+
+
+### Yearly Precip line plot, East TX
+```{r}
+
+## East TX
+
+# Filter columns for years of interest for CHIRPS
+yearly_chirps_cols <- grep("^CHIRPS_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CHIRPS data to long format
+chirps_long <- chirps_data %>%
+  filter(region == 2) %>% 
+  select(all_of(yearly_chirps_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CHIRPS_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Filter columns for CPC dataset
+yearly_cpc_cols <- grep("^CPC_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CPC data to long format
+cpc_long <- chirps_data %>%
+  filter(region == 2) %>%
+  select(all_of(yearly_cpc_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CPC_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Combine both CHIRPS and CPC data
+precip_long <- bind_rows(
+  chirps_long %>% mutate(dataset = "CHIRPS"),
+  cpc_long %>% mutate(dataset = "CPC")
+)
+
+# Calculate averages for the two periods
+averages <- precip_long %>%
+  filter(year %in% c(1981:2010, 2012:2023)) %>%
+  group_by(period = case_when(
+    year >= 1981 & year <= 2010 ~ "1981–2010",
+    year >= 2012 & year <= 2023 ~ "2012–2023",
+    TRUE ~ NA_character_
+  ), dataset) %>%
+  summarize(
+    avg_precip = mean(precip, na.rm = TRUE),
+    x_start = min(year),
+    x_end = max(year),
+    .groups = "drop"
+  )
+
+alpha_val <- 0.5
+
+
+
+# Plot yearly precipitation for both CHIRPS and CPC data, with averages
+p_east <- ggplot(precip_long, aes(x = year, y = precip, color = dataset)) +
+  # CHIRPS 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 1981 & year <= 2010),
+            aes(color = "CHIRPS 1981–2010"), size = 1, alpha = alpha_val) +  
+  # CPC 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 1981 & year <= 2010),
+            aes(color = "CPC 1981–2010"), size = 1, alpha = alpha_val) +  
+  # CHIRPS 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 2012 & year <= 2023),
+            aes(color = "CHIRPS 2012–2023"), size = 1, alpha = alpha_val) +  
+  # CPC 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 2012 & year <= 2023),
+            aes(color = "CPC 2012–2023"), size = 1, alpha = alpha_val) +  
+  # Averages for each period with correct line colors
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 1981–2010"),
+    size = 1, alpha = alpha_val
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 2012–2023"),
+    size = 1, alpha = alpha_val
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 1981–2010"),
+    size = 1, alpha = alpha_val
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 2012–2023"),
+    size = 1, alpha = alpha_val
+  ) +
+  scale_linetype_manual(
+    values = c("1981–2010" = "dashed", "2012–2023" = "dashed"),
+    name = "Period"
+  ) +
+  scale_color_manual(
+    breaks = c( "CHIRPS 1981–2010", 
+      "CPC 1981–2010", 
+      "CHIRPS 2012–2023", 
+      "CPC 2012–2023"),
+    values = c(
+       "orange", 
+       "blue", 
+      "orange4", 
+       "blue4"
+   #   "1981–2010" = "orange", 
+    #  "2012–2023" = "orange4"
+    ),
+    name = ""
+  ) +
+  guides(color = guide_legend(order = 1), linetype = "none") +  # Remove the legend for Period (line type) and keep others
+  labs(
+   # title = "East TX Yearly Precipitation with Period Averages",
+    x = "",
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 14)) + 
+  theme(
+    text = element_text(size = 14),
+    legend.position = "bottom", 
+    legend.box = "horizontal" 
+  )   +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  ) +
+   annotate("text", x = 1980, y = max(precip_long$precip), 
+           label = "East Texas", size = 6, hjust = 0, fontface = "bold") +
+  clean_chart_clutter
+
+
+
+```
+
+
+### Yearly Precip line plot, West TX
+```{r}
+
+
+## West TX
+
+# Filter columns for years of interest for CHIRPS
+yearly_chirps_cols <- grep("^CHIRPS_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CHIRPS data to long format
+chirps_long <- chirps_data %>%
+  filter(region == 1) %>% 
+  select(all_of(yearly_chirps_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CHIRPS_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Filter columns for CPC dataset
+yearly_cpc_cols <- grep("^CPC_precip_\\d{4}$", names(chirps_data), value = TRUE)
+
+# Reshape CPC data to long format
+cpc_long <- chirps_data %>%
+  filter(region == 1) %>%
+  select(all_of(yearly_cpc_cols)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "year",
+    names_prefix = "CPC_precip_",
+    values_to = "precip"
+  ) %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  summarize(precip = mean(precip, na.rm = TRUE), .groups = "drop")  # Aggregate to one entry per year
+
+# Combine both CHIRPS and CPC data
+precip_long <- bind_rows(
+  chirps_long %>% mutate(dataset = "CHIRPS"),
+  cpc_long %>% mutate(dataset = "CPC")
+)
+
+# Calculate averages for the two periods
+averages <- precip_long %>%
+  filter(year %in% c(1981:2010, 2012:2023)) %>%
+  group_by(period = case_when(
+    year >= 1981 & year <= 2010 ~ "1981–2010",
+    year >= 2012 & year <= 2023 ~ "2012–2023",
+    TRUE ~ NA_character_
+  ), dataset) %>%
+  summarize(
+    avg_precip = mean(precip, na.rm = TRUE),
+    x_start = min(year),
+    x_end = max(year),
+    .groups = "drop"
+  )
+
+alpha_val <- 0.5
+
+
+
+# Plot yearly precipitation for both CHIRPS and CPC data, with averages
+p_west <- ggplot(precip_long, aes(x = year, y = precip, color = dataset)) +
+  # CHIRPS 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 1981 & year <= 2010),
+            aes(color = "CHIRPS 1981–2010"), size = 1, alpha = alpha_val) +  
+  # CPC 1981-2010
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 1981 & year <= 2010),
+            aes(color = "CPC 1981–2010"), size = 1, alpha = alpha_val) +  
+  # CHIRPS 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CHIRPS" & year >= 2012 & year <= 2023),
+            aes(color = "CHIRPS 2012–2023"), size = 1, alpha = alpha_val) +  
+  # CPC 2012-2023
+  geom_line(data = precip_long %>% filter(dataset == "CPC" & year >= 2012 & year <= 2023),
+            aes(color = "CPC 2012–2023"), size = 1, alpha = alpha_val) +  
+  # Averages for each period with correct line colors
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 1981–2010"),
+    size = 1, alpha = alpha_val
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CPC"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CPC 2012–2023"),
+    size = 1, alpha = alpha_val
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "1981–2010" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 1981–2010"),
+    size = 1, alpha = alpha_val
+  ) +
+  geom_segment(
+    data = averages %>% filter(period == "2012–2023" & dataset == "CHIRPS"),
+    aes(x = x_start, xend = x_end, y = avg_precip, yend = avg_precip, linetype = period, color = "CHIRPS 2012–2023"),
+    size = 1, alpha = alpha_val
+  ) +
+  scale_linetype_manual(
+    values = c("1981–2010" = "dashed", "2012–2023" = "dashed"),
+    name = "Period"
+  ) +
+  scale_color_manual(
+    breaks = c( "CHIRPS 1981–2010", 
+      "CPC 1981–2010", 
+      "CHIRPS 2012–2023", 
+      "CPC 2012–2023"),
+    values = c(
+       "orange", 
+       "blue", 
+      "orange4", 
+       "blue4"
+   #   "1981–2010" = "orange", 
+    #  "2012–2023" = "orange4"
+    ),
+    name = ""
+  ) +
+  guides(color = guide_legend(order = 1), linetype = "none") +  # Remove the legend for Period (line type) and keep others
+  labs(
+   # title = "West TX Yearly Precipitation with Period Averages",
+    x = "",
+    y = "Precip\n(mm)"
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 14)) + 
+  theme(
+    text = element_text(size = 14),
+    legend.position = "bottom", 
+    legend.box = "horizontal" 
+  )    + # White background
+  theme(
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.title.x = element_blank()
+  ) +
+   annotate("text", x = 1980, y = max(precip_long$precip), 
+           label = "West Texas", size = 6, hjust = 0, fontface = "bold") +
+  clean_chart_clutter
+  
+
+```
+
+
+
+### Figure A.4
+### Yearly Precip line plot, Combined
+
+```{r}
+
+combined_plot <- p_west + p_east +
+  # Adjust layout to include the shared legend below
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "bottom",  # Place the legend below the combined plot
+    plot.title = element_text()
+  ) 
+
+p <- combined_plot + plot_annotation(tag_levels = "A") & 
+  theme(
+    plot.tag = element_text(face = "bold", size = 16),  # Bold tags
+    plot.tag.position = c(0, 0.95)  # Adjust vertical position
+  )
+
+ggsave_ol(p, 
+          "FigA4_west_east_tx_cpc_chirps_lines",  # Output file name
+          "CPC and CHIRPS comparisons for historical baseline (1981-2010) and evaluation period (2012-2023)",
+          height = 5,  # in inches
+          width = 8   # in inches
+)
+
+```
+

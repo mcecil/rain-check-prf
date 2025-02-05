@@ -1,0 +1,800 @@
+---
+title: "ARER Figures"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Payout magnitudes
+## Tables 3, A1, A5 
+## Figures 4, A11
+
+
+### load CPC (1981) and CHIRPS payouts
+
+```{r}
+
+
+## combine grazing and non-irrigated haying
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_cpc_index_1981_base.rda"),
+                     "grazing_cpc_2021")
+
+grazing_cpc_indemnities_group <-  grazing_cpc_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_cpc_index_1981_base, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CPC_Grazing = sum_value)
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_cpc_index_1981_base.rda"),
+                     "haying_cpc_2021")
+
+haying_cpc_indemnities_group <-  haying_cpc_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_cpc_index_1981_base, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CPC_Haying = sum_value)
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_CHIRPS_index.rda"),
+                     "grazing_chirps_2021")
+
+grazing_chirps_indemnities_group <-  grazing_chirps_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_CHIRPS_index, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CHIRPS_Grazing = sum_value)
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_CHIRPS_index.rda"),
+                     "haying_chirps_2021")
+
+haying_chirps_indemnities_group <-  haying_chirps_2021 %>%
+  group_by(Coverage.Level.Percent) %>%
+  summarize(sum_value = sum(Indemnity_CHIRPS_index, na.rm = TRUE)) %>% 
+  arrange(Coverage.Level.Percent) %>% 
+  rename(Threshold = Coverage.Level.Percent,
+         CHIRPS_Haying = sum_value)
+
+
+
+all_payouts <- grazing_cpc_indemnities_group %>%
+  full_join(grazing_chirps_indemnities_group, by = "Threshold") %>%
+  full_join(haying_cpc_indemnities_group, by = "Threshold") %>%
+  full_join(haying_chirps_indemnities_group, by = "Threshold") 
+
+all_payouts_combined <- all_payouts
+all_payouts_combined$CPC_payout <- all_payouts_combined$CPC_Grazing + all_payouts_combined$CPC_Haying
+all_payouts_combined$CHIRPS_payout <- all_payouts_combined$CHIRPS_Grazing + all_payouts_combined$CHIRPS_Haying
+all_payouts_combined$CHIRPS_CPC_ratio <- round(all_payouts_combined$CHIRPS_payout/all_payouts_combined$CPC_payout, 2)
+
+all_payouts_combined <- all_payouts_combined %>% select(Threshold, CPC_payout, CHIRPS_payout, CHIRPS_CPC_ratio)
+
+```
+
+
+
+### Table for all year payouts (CPC vs CHIRPS)
+```{r}
+
+year_df <- data.frame(Year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_CHIRPS_index.rda")),
+                     "grazing_chirps")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_CHIRPS_index.rda")),
+                     "haying_chirps")
+  
+  cpc_payout <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  chirps_payout <- sum(grazing_chirps$Indemnity_CHIRPS_index) + sum(haying_chirps$Indemnity_CHIRPS_index)
+  
+  year_df[["Estimated CHIRPS"]][k]  <- paste0("$", round(chirps_payout/1000000, 1), " M")
+  year_df[["Estimated CPC"]][k] <- paste0("$", round(cpc_payout/1000000, 1), " M")
+  year_df[["CHIRPS/CPC"]][k] <- round(chirps_payout/cpc_payout, 2)
+  
+  
+}
+
+
+```
+
+
+
+## Export Table A.5
+```{r}
+
+xtable_output(year_df, 
+              "TabA5_chirps_vs_cpc_1981",
+              "Comparison of CHIRPS estimated and CPC Estimated (with 1981 start year) dollar values. Ratio is CHIRPS/CPC.")
+
+```
+
+
+
+
+### Table for all year payouts (CPC estimated 1981 vs CPC Reported)
+```{r}
+
+year_df <- data.frame(Year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+
+  cpc_payout <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  cpc_reported_payout <- sum(grazing_cpc$Indemnity.Amount) + sum(haying_cpc$Indemnity.Amount)
+  
+ # year_df$CPC_estimated_num[k] <- cpc_payout
+#  year_df$CPC_reported_num[k] <- cpc_reported_payout
+
+  year_df[["Estimated (1981 baseline)"]][k] <- paste0("$", round(cpc_payout/1000000, 1), " M")
+  year_df[["Reported"]][k] <- paste0("$", round(cpc_reported_payout/1000000, 1), " M")
+ # year_df$CPC_reported_dollars[k]  <- cpc_reported_payout
+
+  year_df[["Estimated/Reported"]] [k] <- round(cpc_payout/cpc_reported_payout, 2)
+  # 
+  # cpc_previous_year_payout_ratio <- ifelse(k > 1, round(year_df$CPC_reported_dollars[k-1]/cpc_reported_payout, 2), 1)
+  # year_df$CPC_year_on_year[k] <- cpc_previous_year_payout_ratio
+  
+}
+
+```
+
+
+### Export Table 3
+```{r}
+
+xtable_output(year_df, 
+              "Tab3_reported_vs_estimated_1981",
+              "Comparison of CPC Estimated (with 1981 start year) and Reported dollar values. Ratio is Estimated/Reported.")
+
+```
+
+
+### Table for all year payouts (CPC estimated 1948 vs CPC reported)
+```{r}
+
+year_df <- data.frame(Year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index.rda")),
+                     "haying_cpc")
+
+  cpc_payout <- sum(grazing_cpc$Indemnity_cpc_index) + sum(haying_cpc$Indemnity_cpc_index)
+
+  cpc_reported_payout <- sum(grazing_cpc$Indemnity.Amount) + sum(haying_cpc$Indemnity.Amount)
+  
+ # year_df$CPC_estimated_num[k] <- cpc_payout
+#  year_df$CPC_reported_num[k] <- cpc_reported_payout
+
+  year_df[["Estimated (1948 baseline)"]][k] <- paste0("$", round(cpc_payout/1000000, 1), " M")
+  year_df[["Reported"]][k] <- paste0("$", round(cpc_reported_payout/1000000, 1), " M")
+ # year_df$CPC_reported_dollars[k]  <- cpc_reported_payout
+
+  year_df[["Estimated/Reported"]] [k] <- round(cpc_payout/cpc_reported_payout, 2)
+  # 
+  # cpc_previous_year_payout_ratio <- ifelse(k > 1, round(year_df$CPC_reported_dollars[k-1]/cpc_reported_payout, 2), 1)
+  # year_df$CPC_year_on_year[k] <- cpc_previous_year_payout_ratio
+  
+}
+
+```
+
+Export Table A1
+```{r}
+
+xtable_output(year_df, 
+              "TabA1_reported_vs_estimated_1948",
+              "Comparison of CPC Estimated (with 1948 start year) and Reported dollar values. Ratio is Estimated/Reported.")
+
+```
+
+
+
+
+
+
+#### Table for all year payouts (CPC 1981 estimated vs CPC 1948 estimated)
+```{r}
+
+year_df <- data.frame(Year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+
+  cpc_payout_1981 <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index.rda")),
+                     "grazing_cpc_1948")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index.rda")),
+                     "haying_cpc_1948")
+  
+  cpc_payout_1948 <- sum(grazing_cpc_1948$Indemnity_cpc_index) + sum(haying_cpc_1948$Indemnity_cpc_index)
+
+  year_df[["Estimated CPC 1948"]][k] <- paste0("$", round(cpc_payout_1948/1000000, 1), " M")
+  year_df[["Estimated CPC 1981"]][k] <- paste0("$", round(cpc_payout_1981/1000000, 1), " M")
+  year_df[["CPC 1948/CPC 1981"]][k] <- round(cpc_payout_1948/cpc_payout_1981, 2)
+  
+}
+
+
+
+xtable_output(year_df, 
+              "estimated_cpc_1948_cpc_1981",
+              "Comparison of CPC Estimated with 1948 start year vs. with 1981 start year.")
+
+```
+
+
+#### Table for all year payouts (CHIRPS fine vs CHIRPS coarse)
+```{r}
+
+year_df <- data.frame(Year = 2012:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  
+
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_CHIRPS_index.rda")),
+                     "grazing_chirps")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_CHIRPS_index.rda")),
+                     "haying_chirps")
+  
+  chirps_payout <- sum(grazing_chirps$Indemnity_CHIRPS_index) + sum(haying_chirps$Indemnity_CHIRPS_index)
+  
+  print(sum(grazing_chirps$Indemnity_CHIRPS_index))
+  print(sum(haying_chirps$Indemnity_CHIRPS_index))
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_CHIRPS_index_coarse.rda")),
+                     "grazing_chirps_coarse")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_CHIRPS_index_coarse.rda")),
+                     "haying_chirps_coarse")
+  
+    print(sum(grazing_chirps_coarse$Indemnity_CHIRPS_index_coarse))
+    print(sum(haying_chirps_coarse$Indemnity_CHIRPS_index_coarse))
+  
+  chirps_payout_coarse <- sum(grazing_chirps_coarse$Indemnity_CHIRPS_index_coarse) + sum(haying_chirps_coarse$Indemnity_CHIRPS_index_coarse)
+  year_df[["Estimated CHIRPS coarse"]][k]  <- paste0("$", round(chirps_payout_coarse/1000000, 1), " M")
+  year_df[["Estimated CHIRPS fine"]][k]  <- paste0("$", round(chirps_payout/1000000, 1), " M")
+  year_df[["coarse/fine"]][k] <- round(chirps_payout_coarse/chirps_payout, 2)
+}
+
+
+xtable_output(year_df, 
+              "estimated_chirps_coarse_fine",
+              "Comparison of estimated indemnities for CHIRPS using fine (0.05 degrees) and coarsened (0.25 degrees) resolution.")
+
+
+```
+
+
+
+#### Table for 2021-23 payouts (CPC 1981 vs CPC 1981-CDL)
+```{r}
+
+year_df <- data.frame(Year = 2021:2023)
+
+for (k in 1:nrow(year_df)){
+  year <- year_df$Year[k]
+  print(year)
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index_1981_base.rda")),
+                     "grazing_cpc")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index_1981_base.rda")),
+                     "haying_cpc")
+
+  cpc_payout_1981 <- sum(grazing_cpc$Indemnity_cpc_index_1981_base) + sum(haying_cpc$Indemnity_cpc_index_1981_base)
+
+  cpc_reported_payout <- sum(grazing_cpc$Indemnity.Amount) + sum(haying_cpc$Indemnity.Amount)
+
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Grazing_", year, "_cpc_index_1981_base_cdl.rda")),
+                     "grazing_cpc_cdl")
+  
+  load_rda_to_variable(here(paste0("data/outputs/payouts/tpu_Haying_", year, "_cpc_index_1981_base_cdl.rda")),
+                     "haying_cpc_cdl")
+
+  cpc_payout_1981_cdl <- sum(grazing_cpc_cdl$Indemnity_cpc_index_1981_base) + sum(haying_cpc_cdl$Indemnity_cpc_index_1981_base)
+  
+
+  year_df[["Estimated CPC (cdl weighting)"]][k] <- paste0("$", round(cpc_payout_1981_cdl/1000000, 1), " M")
+  year_df[["Estimated CPC (area weighting)"]][k] <- paste0("$", round(cpc_payout_1981/1000000, 1), " M")
+  year_df[["cdl/area"]][k] <- round(cpc_payout_1981_cdl/cpc_payout_1981, 2)
+  year_df[["Reported"]][k] <- paste0("$", round(cpc_reported_payout/1000000, 1), " M")
+
+}
+
+
+
+xtable_output(year_df, 
+              "estimated_cpc_1981_cpc_cdl",
+              "Comparison of CPC Estimated with Cropland Data Layer weighting for CPC grids cells, and with proportional area weighting.")
+
+```
+
+
+
+
+## map plots
+## Load 2021 data
+
+```{r}
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_cpc_index_1981_base.rda"),
+                     "grazing_cpc_2021")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_cpc_index_1981_base.rda"),
+                     "haying_cpc_2021")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Grazing_2021_CHIRPS_index.rda"),
+                     "grazing_chirps_2021")
+
+load_rda_to_variable(here("data/outputs/payouts/tpu_Haying_2021_CHIRPS_index.rda"),
+                     "haying_chirps_2021")
+
+tx_counties <- st_read(here("data/Tx_CntyBndry_Jurisdictional_TIGER/Tx_CntyBndry_Jurisdictional_TIGER.shp"))
+tx_counties <- st_set_crs(tx_counties, 4326)  # Example: EPSG 4326 (WGS84)
+tx_counties$COUNTYID <- as.numeric(tx_counties$COUNTYID)
+
+tx_counties$CPC_indemnities <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k]
+  grazing_cpc <- grazing_cpc_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_cpc_index_1981_base) %>% 
+    sum()
+  haying_cpc <- haying_cpc_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_cpc_index_1981_base) %>% 
+    sum()
+  cpc_indemnity <- grazing_cpc + haying_cpc
+})
+
+tx_counties$CHIRPS_indemnities <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k]
+  grazing_chirps <- grazing_chirps_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_CHIRPS_index) %>% 
+    sum()
+  haying_chirps <- haying_chirps_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Indemnity_CHIRPS_index) %>% 
+    sum()
+  chirps_indemnity <- grazing_chirps + haying_chirps
+})
+
+tx_counties$acres <- sapply(1:nrow(tx_counties), function(k){
+  current_county_id <- tx_counties$COUNTYID[k]
+  grazing_chirps <- grazing_chirps_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Net.Reporting.Level.Amount) %>% 
+    sum()
+  haying_chirps <- haying_chirps_2021 %>%
+    filter(County.Code == current_county_id) %>%
+    pull(Net.Reporting.Level.Amount) %>% 
+    sum()
+  chirps_indemnity <- grazing_chirps + haying_chirps
+})
+
+tx_counties <- tx_counties %>%
+  mutate(CPC_indemnities = ifelse(acres == 0, NA, CPC_indemnities)) %>% 
+  mutate(CHIRPS_indemnities = ifelse(acres == 0, NA, CHIRPS_indemnities))
+
+  
+
+
+tx_counties$CHIRPS_minus_CPC <- tx_counties$CHIRPS_indemnities - tx_counties$CPC_indemnities
+
+tx_counties$CHIRPS_CPC_ratio <- tx_counties$CHIRPS_indemnities / tx_counties$CPC_indemnities
+
+
+
+```
+
+
+
+## Fig A11
+
+```{r}
+
+max_payout <- max(max(tx_counties$CPC_indemnities), max(tx_counties$CHIRPS_indemnities))
+
+
+# Calculate breaks for the population column
+n_breaks <- 7  # Number of breaks (adjustable)
+breaks <- classInt::classIntervals(
+  tx_counties$CPC_indemnities,
+  n = n_breaks,
+  style = "quantile"  # Choose a style: "pretty", "quantile", "equal", etc.
+)
+
+adjusted_breaks <- c(0, 200000, 500000, 1000000, 3000000, 9000000)
+  
+
+formatted_labels <- paste0(
+  scales::label_number(scale = 1e-6, accuracy = 0.1)(adjusted_breaks[-length(adjusted_breaks)]), 
+  " - ",
+  scales::label_number(scale = 1e-6, accuracy = 0.1)(adjusted_breaks[-1])
+)
+
+# Assign the formatted labels using cut()
+tx_counties$CPC_indemnity_group <- cut(
+  tx_counties$CPC_indemnities,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+# Assign the formatted labels using cut()
+tx_counties$CHIRPS_indemnity_group <- cut(
+  tx_counties$CHIRPS_indemnities,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+
+
+columns_to_keep <- c("CPC_indemnities",
+                     "CHIRPS_indemnities",
+                     "CPC_indemnity_group",
+                     "CHIRPS_indemnity_group")
+
+columns_to_plot <- c("CPC_indemnities",
+                     "CHIRPS_indemnities")
+
+
+# Reshape the sf object to long format
+tx_counties_long <- tx_counties %>%
+  select(all_of(columns_to_keep)) %>%
+  pivot_longer(cols = all_of(columns_to_plot), 
+               names_to = "Variable", 
+               values_to = "Value")
+
+colors <- RColorBrewer::brewer.pal(n = length(adjusted_breaks) - 1, "Blues")
+
+
+
+
+
+# Step 4: Plot using ggplot2
+p1 <- ggplot(tx_counties) +
+  geom_sf(aes(fill = CPC_indemnity_group), color = "black") +
+  geom_sf(data = tx_counties %>% filter(CPC_indemnities == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name ="$M", # Legend title
+    na.translate = TRUE,      # Include NA in the legend
+    labels = function(x) ifelse(is.na(x), "No\npolicies", x) # Change only the NA label
+  ) +
+  theme_minimal() +
+  labs(title = "CPC Payouts ($)") + 
+  theme(
+    legend.position = "bottom",  # Position legend below
+    axis.text = element_blank(), # Remove gridline numbers
+    axis.ticks = element_blank() # Remove gridline ticks
+  ) + 
+  theme(panel.grid.major = element_blank(),      # Remove panel grid lines
+    panel.grid.minor = element_blank(),      # Remove panel grid lines
+    panel.background = element_blank()
+  ) +
+  theme(
+    legend.key = element_rect(size = 5, color = NA),  # Ensures square legend keys
+    legend.key.size = unit(0.8, "cm")  # Adjust key size for perfect square
+  )
+  
+
+p2 <- ggplot(tx_counties) +
+  geom_sf(aes(fill = CHIRPS_indemnity_group), color = "black") +
+  geom_sf(data = tx_counties %>% filter(CHIRPS_indemnities == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name ="$M", # Legend title
+    na.translate = TRUE,      # Include NA in the legend
+    labels = function(x) ifelse(is.na(x), "No\npolicies", x) # Change only the NA label
+  ) +
+  theme_minimal() +
+  labs(title = "CHIRPS Payouts ($)") + 
+  theme(
+    legend.position = "bottom",  # Position legend below
+    axis.text = element_blank(), # Remove gridline numbers
+    axis.ticks = element_blank() # Remove gridline ticks
+  )  + 
+  theme(panel.grid.major = element_blank(),      # Remove panel grid lines
+    panel.grid.minor = element_blank(),      # Remove panel grid lines
+    panel.background = element_blank()
+  ) + 
+  theme(
+    legend.key = element_rect(size = 5, color = NA),  # Ensures square legend keys
+    legend.key.size = unit(0.8, "cm")  # Adjust key size for perfect square
+  )
+
+
+prow <- plot_grid(
+  p1  + 
+    guides(fill = guide_legend(nrow = 2,
+                                     title.position = "left",
+)) + # Use 'fill' instead of 'color'
+    theme(legend.justification = c(0, 0),
+          legend.position = c(0, -0.2),
+          legend.text = element_text(size = 11) ),
+  p2  + guides(fill = guide_legend(nrow = 2,
+                                     title.position = "left",
+)) + # Use 'fill' instead of 'color'
+    theme(legend.justification = c(0, 0),
+          legend.position = c(0, -0.2),
+          legend.text = element_text(size = 11) ),
+  labels = c("A", "B"),  # Add labels to each plot
+  label_size = 16,  # Adjust label size
+  label_fontface = "bold",  # Make labels bold
+  label_x = 0,  # Adjust horizontal position (0 = left, 1 = right)
+  label_y = 0.75, # Move label lower (1 = top, 0 = bottom)
+  align = 'vh',
+  hjust = -1,
+  nrow = 1
+)
+
+ggsave_ol(prow, 
+          "FigA11_cpc_chirps_payouts_counties",  # Output file name
+          "CPC and CHIRPS estimated payouts for 2021 in Texas counties. ",
+          height = 6,  # in inches
+          width = 8   # in inches)
+)
+
+
+```
+
+
+
+## Payout difference and ratio
+## Fig 4
+
+```{r}
+
+# Calculate breaks for the population column
+n_breaks <- 5  # Number of breaks (adjustable)
+breaks <- classInt::classIntervals(
+  tx_counties$CHIRPS_minus_CPC,
+  n = n_breaks,
+  style = "quantile"  # Choose a style: "pretty", "quantile", "equal", etc.
+)
+
+adjusted_breaks <- c(-2900000, -1000000, -500000, -200000, 0, 220000)
+  
+
+# Format the labels with dollar signs and commas
+formatted_labels <- paste0(
+  scales::label_number(scale = 1e-6, accuracy = 0.1)(adjusted_breaks[-length(adjusted_breaks)]), 
+  " - ",
+  scales::label_number(scale = 1e-6, accuracy = 0.1)(adjusted_breaks[-1])
+)
+
+format_number <- function(x) {
+  formatted <- label_number(scale = 1e-6, accuracy = 0.1)(x)  # Convert to millions format
+  ifelse(x < 0, paste0("(", gsub("-", "-", formatted), ")"), formatted)  # Add parentheses to negatives
+}
+
+# Apply the function to the break labels
+formatted_labels <- paste0(
+  format_number(adjusted_breaks[-length(adjusted_breaks)]), 
+  " - ", 
+  format_number(adjusted_breaks[-1])
+)
+
+# Assign the formatted labels using cut()
+tx_counties$difference_group <- cut(
+  tx_counties$CHIRPS_minus_CPC,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+n_below <- sum(adjusted_breaks <= 0) - 1  # Number of intervals below 0
+n_above <- sum(adjusted_breaks > 0) - 1  # Number of intervals above 0
+
+# Get colors
+colors_below <- rev(RColorBrewer::brewer.pal(n = max(3, n_below), "Blues")[1:n_below])
+colors_above <- RColorBrewer::brewer.pal(n = max(3, n_above), "Reds")[1:n_above]
+
+# Add white for 0 values
+colors <- c(colors_below, colors_above)
+
+
+
+# Step 4: Plot using ggplot2
+p3 <- ggplot(tx_counties) +
+  geom_sf(aes(fill = difference_group), color = "black") +
+  geom_sf(data = tx_counties %>% filter(CHIRPS_minus_CPC == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name ="$M", # Legend title
+    na.translate = TRUE,      # Include NA in the legend
+    labels = function(x) ifelse(is.na(x), "No\npolicies", x) # Change only the NA label
+  ) +
+  theme_minimal() +
+  labs(title = "Difference (CHIRPS - CPC)") + 
+  theme(
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 14),
+    text = element_text(size = 14),
+    legend.position = "bottom",  # Position legend below
+    axis.text = element_blank(), # Remove gridline numbers
+    axis.ticks = element_blank() # Remove gridline ticks
+  ) + 
+  theme(panel.grid.major = element_blank(),      # Remove panel grid lines
+    panel.grid.minor = element_blank(),      # Remove panel grid lines
+    panel.background = element_blank()
+  ) +
+  theme(
+    legend.key = element_rect(size = 5, color = NA),  # Ensures square legend keys
+    legend.key.size = unit(0.8, "cm")  # Adjust key size for perfect square
+  )
+
+
+#### Payout ratio
+
+adjusted_breaks <- c(0.2, 0.5, 0.8, 1, 1.5, 2)
+  
+
+# Format the labels with dollar signs and commas
+formatted_labels <- paste0(
+  (adjusted_breaks[-length(adjusted_breaks)]), " - ",
+  (adjusted_breaks[-1])
+)
+
+# Assign the formatted labels using cut()
+tx_counties$ratio_group <- cut(
+  tx_counties$CHIRPS_CPC_ratio,
+  breaks = adjusted_breaks,
+  include.lowest = TRUE,
+  labels = formatted_labels
+)
+
+n_below <- sum(adjusted_breaks <= 1) - 1  # Number of intervals below 0
+n_above <- sum(adjusted_breaks >= 1) - 1  # Number of intervals above 0
+
+# Get colors
+colors_below <- rev(RColorBrewer::brewer.pal(n = max(3, n_below), "Blues")[1:n_below])
+colors_above <- RColorBrewer::brewer.pal(n = max(3, n_above), "Reds")[1:n_above]
+
+# Add white for 0 values
+colors <- c(colors_below, colors_above)
+
+
+
+# Step 4: Plot using ggplot2
+p4 <- ggplot(tx_counties) +
+  geom_sf(aes(fill = ratio_group), color = "black") +
+#  geom_sf(data = tx_counties %>% filter(CHIRPS_minus_CPC == 0), fill = "white", color = "black") +
+  scale_fill_manual(
+    values = colors,
+    name ="", # Legend title
+    na.translate = TRUE,      # Include NA in the legend
+    labels = function(x) ifelse(is.na(x), "No\npolicies", x) # Change only the NA label
+  ) +
+  theme_minimal() +
+  labs(title = "Ratio (CHIRPS/CPC)") + 
+  theme(
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 14),
+    text = element_text(size = 14),
+    legend.position = "bottom",  # Position legend below
+    axis.text = element_blank(), # Remove gridline numbers
+    axis.ticks = element_blank() # Remove gridline ticks
+  ) + 
+  theme(panel.grid.major = element_blank(),      # Remove panel grid lines
+    panel.grid.minor = element_blank(),      # Remove panel grid lines
+    panel.background = element_blank()
+  ) +
+  theme(
+    legend.key = element_rect(size = 5, color = NA),  # Ensures square legend keys
+    legend.key.size = unit(0.8, "cm")  # Adjust key size for perfect square
+  )
+
+
+prow <- plot_grid(
+  p3  + 
+    guides(fill = guide_legend(nrow = 2,
+                                     title.position = "left",
+)) + # Use 'fill' instead of 'color'
+    theme(legend.justification = c(0, 0),
+          legend.position = c(0, -0.2),
+          legend.text = element_text(size = 11) ),
+  p4  + guides(fill = guide_legend(nrow = 2,
+                                     title.position = "left",
+)) + # Use 'fill' instead of 'color'
+    theme(legend.justification = c(0, 0),
+          legend.position = c(0.15, -0.2),
+          legend.text = element_text(size = 11) ),
+  labels = c("A", "B"),  # Add labels to each plot
+  label_size = 16,  # Adjust label size
+  label_fontface = "bold",  # Make labels bold
+  label_x = 0,  # Adjust horizontal position (0 = left, 1 = right)
+  label_y = 0.75, # Move label lower (1 = top, 0 = bottom)
+  align = 'vh',
+  hjust = -1,
+  nrow = 1
+)
+
+ggsave_ol(prow, 
+          "Fig4_cpc_chirps_diff_ratio_counties",  # Output file name
+          "CPC and CHIRPS difference and ratio of estimated payouts for 2021. ",
+          height = 6,  # in inches
+          width = 8   # in inches)
+)
+
+```
+
+
+
+

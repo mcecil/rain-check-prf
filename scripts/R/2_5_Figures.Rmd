@@ -1,0 +1,209 @@
+---
+title: "ARER Figures 2-5"
+author: Michael Cecil
+output: html_notebook
+---
+
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+library(exactextractr)
+library(tidyr)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(xtable)
+library(patchwork)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+
+
+```
+
+
+## code for exporting figures and tables to LaTex
+```{r}
+source(here("scripts/R/plotting_functions.R"))
+```
+
+
+
+## Binary payout determinations
+## Fig 3
+
+
+## Binary payout
+### payout determinations, similar to Table 1, Figure 3
+
+```{r}
+
+load(here("data/outputs/chirps_data_TX_region.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+
+
+for(interval in 625:635){
+  chirps_column <- paste0("CHIRPS_index_2021_", interval)
+  cpc_column <- paste0("cpc_index_1981_base_2021_", interval)
+  chirps_data[[paste0("CHIRPS_payout_only_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] < 0.9 & chirps_data[[cpc_column]] >= 0.9, 1, 0)
+  chirps_data[[paste0("CPC_payout_only_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] >= 0.9 & chirps_data[[cpc_column]] < 0.9, 1, 0)
+  chirps_data[[paste0("both_payout_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] < 0.9 & chirps_data[[cpc_column]] < 0.9, 1, 0)
+  chirps_data[[paste0("neither_payout_2021_", interval )]] <- ifelse(chirps_data[[chirps_column]] >= 0.9 & chirps_data[[cpc_column]] >= 0.9, 1, 0)
+}
+
+chirps_data$CHIRPS_payout_only_sum <- rowSums(chirps_data[, paste0("CHIRPS_payout_only_2021_", 625:635)])
+chirps_data$CPC_payout_only_sum <- rowSums(chirps_data[, paste0("CPC_payout_only_2021_", 625:635)])
+chirps_data$both_payout_sum <- rowSums(chirps_data[, paste0("both_payout_2021_", 625:635)])
+chirps_data$neither_payout_sum <- rowSums(chirps_data[, paste0("neither_payout_2021_", 625:635)])
+
+chirps_data_summary <- chirps_data %>%
+  group_by(GRIDCODE) %>%
+  summarise(
+    sum_chirps_only = sum(CHIRPS_payout_only_sum),
+    sum_cpc_only = sum(CPC_payout_only_sum),
+    sum_both_payout = sum(both_payout_sum),
+    sum_neither_payout = sum(neither_payout_sum),
+    Count = 11 * n()
+  )
+
+chirps_data_summary$CHIRPS_only_pct <- 100*chirps_data_summary$sum_chirps_only/chirps_data_summary$Count
+chirps_data_summary$CPC_only_pct <- 100*chirps_data_summary$sum_cpc_only/chirps_data_summary$Count
+chirps_data_summary$total_disagreement_pct <- chirps_data_summary$CHIRPS_only_pct + chirps_data_summary$CPC_only_pct
+# Merge the summarized df2 with df1
+  
+
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+# monthly_averages_merge <- merge(grids, monthly_averages,
+#                           by = c("lon", "lat"))
+
+
+
+## filter to TX grid cells
+year <- 2021
+tx_grid_ids <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"), full.names = T) %>%
+  first() %>% read.csv() %>% pull(GRIDCODE) %>% unique()
+
+tx_grids <- grids %>% filter(GRIDCODE %in% tx_grid_ids)
+
+tx_grids <- tx_grids %>% filter(GRIDCODE %in% unique(chirps_data$GRIDCODE))
+tx_grids <- merge(tx_grids, chirps_data_summary,
+                  by = "GRIDCODE", all.x = T)
+
+
+
+## crosstab table
+binary_payout <- data.frame("CPC_yes" = c(NA, NA), "CPC_no" = c(NA, NA))
+
+rownames(binary_payout) <- c("CHIRPS_yes", "CHIRPS_no")
+
+binary_payout$CPC_yes[1] <- sum(chirps_data_summary$sum_both_payout)
+binary_payout$CPC_yes[2] <- sum(chirps_data_summary$sum_cpc_only)
+binary_payout$CPC_no[1] <- sum(chirps_data_summary$sum_chirps_only)
+binary_payout$CPC_no[2] <- sum(chirps_data_summary$sum_neither_payout)
+
+```
+
+
+## 3 panel plot for binary payout
+## Figure 3
+```{r}
+
+columns_to_plot <- c("CHIRPS_only_pct",
+                     "CPC_only_pct",
+                     "total_disagreement_pct")
+
+# Reshape the sf object to long format
+tx_grids_long <- tx_grids %>%
+  select(all_of(columns_to_plot)) %>%
+  pivot_longer(cols = all_of(columns_to_plot), 
+               names_to = "Variable", 
+               values_to = "Value")
+
+# Define the breaks and colors
+breaks <- seq(0, 60, by = 10)
+purples_palette <- brewer.pal(n = length(breaks) - 1, name = "Purples")
+
+facet_titles <- c(
+  CHIRPS_only_pct = "CHIRPS Only %",
+  CPC_only_pct = "CPC Only %",
+  total_disagreement_pct = "Total Disagreement %"
+)
+
+break_labels <- paste0(seq(0, 50, by = 10), "-", seq(10, 60, by = 10), "%")
+
+facet_labels <- data.frame(
+  Variable = unique(tx_grids_long$Variable),
+  label = LETTERS[1:length(unique(tx_grids_long$Variable))]  # Generate "A", "B", "C", etc.
+)
+
+# Merge with the original data to ensure correct labels per facet
+tx_grids_long <- tx_grids_long %>%
+  left_join(facet_labels, by = "Variable")
+
+
+p <- ggplot(data = tx_grids_long) +
+  geom_sf(aes(fill = cut(Value, breaks = breaks, include.lowest = TRUE, labels = break_labels)), 
+          color = NA) +
+  scale_fill_manual(values = purples_palette, 
+                    drop = FALSE) +
+  facet_wrap(~Variable, nrow = 1, 
+             labeller = as_labeller(facet_titles)) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",  # Position legend below
+    legend.text = element_text(size = 14),  # Set legend item text size
+    legend.title = element_blank(),  # Remove legend title
+    legend.key = element_rect(size = 5, color = NA),  # Make legend boxes square
+    legend.key.size = unit(1, "cm"),  # Adjust legend key size to make it square
+    axis.text = element_blank(), # Remove gridline numbers
+    axis.ticks = element_blank(), # Remove gridline ticks
+    axis.title.x = element_blank(),  # Remove x-axis title
+    axis.title = element_blank(),  # Set axis title size (x and y)
+    plot.title = element_text(size = 14),  # Set title size and center it
+    text = element_text(size = 14),
+    strip.text = element_text(size = 14)  # Set facet title size
+  ) +
+  guides(fill = guide_legend(nrow = 2)) + # Force two-row legend
+  theme(    
+    panel.grid.major = element_blank(),      # Remove panel grid lines
+    panel.grid.minor = element_blank(),      # Remove panel grid lines
+    panel.background = element_blank(),      # Remove panel background
+  ) +
+  geom_text(data = facet_labels, aes(x = -Inf, y = Inf, label = label), 
+            hjust = -0.5, vjust = 1.5, fontface = "bold", size = 6, inherit.aes = FALSE)
+
+
+
+
+
+ggsave_ol(p, 
+          "Fig3_binary_comparison_3_panel",  # Output file name
+          "Plots shows percent of fine-scale pixels with respectively, estimated CHIRPS only payouts, estimated CPC only payouts, and disagreement in either direction. The third panel essentially represents a grid-wise sum of the first two panels. Payouts are based on a 0.90 coverage level, and calculated for all 11 intervals in 2021. ",
+          height = 5,  # in inches
+          width = 8   # in inches)
+)
+
+```
+
+
+
+
+
+

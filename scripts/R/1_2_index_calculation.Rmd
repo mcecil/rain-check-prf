@@ -1,0 +1,232 @@
+---
+title: "ARER workflow - index calculation"
+author: Michael Cecil
+output: html_notebook
+---
+
+This notebook performs the rainfall index and payout calculations for much of the manuscript.
+It uses different spatiotemporal assumptions on the CPC and CHIRPS datasets.
+
+
+## load required libraries
+
+```{r}
+
+library(dplyr)
+library(here)
+library(sf)
+library(raster)
+library(conflicted)
+library(rlang)
+library(scico)
+library(ggpubr)
+library(assertthat)
+library(ggplot2)
+
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
+options(max.print = 10000)
+```
+
+
+## Load pre-calculated monthly averages for CPC data, filter to TX CPC grids
+
+```{r}
+
+monthly_averages <- read.csv(here("data/outputs/monthly_averages_na_rm.csv"))
+
+## adjust longitude in above to be negative in western hemisphere
+monthly_averages$lon <- monthly_averages$lon - 360
+
+## Load CPC grids as spatial object, merge monthly average columns to spatial object
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+monthly_averages_merge <- merge(grids, monthly_averages,
+                          by = c("lon", "lat"))
+
+## filter to TX grid cells
+year <- 2023
+tx_grids <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"), full.names = T) %>%
+  first() %>% read.csv() %>% pull(GRIDCODE) %>% unique()
+
+```
+
+## merge CPC data with single year of monthly CHIRPS averags (to consolidate data columns)
+
+```{r}
+
+monthly_averages_tx <- monthly_averages_merge %>%
+  filter(GRIDCODE %in% tx_grids)
+
+current_year <- 2023
+
+chirps_files <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", current_year, "_"))
+if(length(chirps_files) == 11){
+  chirps_data <- read.csv(here(paste0("data/PRF-RI_CHIRPS/", chirps_files[grepl("625.csv", chirps_files)])))
+  ## rename CHIRPS precip column with interval
+  new_name <- paste0("CHIRPS_precip_", current_year, "_625")
+  chirps_data[[new_name]] <- chirps_data$CHIRPS_precip
+  chirps_data$CHIRPS_precip <- NULL
+
+  ## merge with CPC data, need to have CHIRPS data on left as it has more rows
+  chirps_data <- merge(chirps_data,
+                       monthly_averages_tx,
+                       by = 'GRIDCODE')
+
+  for(interval in 626:635){
+    chirps_data_temp <- read.csv(here(paste0("data/PRF-RI_CHIRPS/", chirps_files[grepl(paste0(interval, ".csv"), chirps_files)])))
+  ## rename CHIRPS precip column with interval
+    new_name <- paste0("CHIRPS_precip_", current_year, "_", interval)
+    chirps_data_temp[[new_name]] <- chirps_data_temp$CHIRPS_precip
+    chirps_data_temp$CHIRPS_precip <- NULL
+
+  ## merge with CPC data, need to have CHIRPS data on left as it has more rows
+    chirps_data <- merge(chirps_data,
+                         chirps_data_temp[, c('CHIRPS_LAT', 'CHIRPS_LON', new_name)],
+                         by = c('CHIRPS_LAT', 'CHIRPS_LON'))
+
+  }
+}
+
+```
+
+
+
+## Iterate over other years in CHIRPS data fiels, and join them to "chirps_data"
+```{r}
+
+for(year in 1981:2023){
+  print(year)
+  if(year == current_year){
+    next
+  }
+  chirps_files <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"))
+ 
+  if(length(chirps_files) != 11){
+    print(paste0('incorrect # of files ', year))
+    break
+   }
+  for(interval in 625:635){
+    chirps_data_temp <- read.csv(here(paste0("data/PRF-RI_CHIRPS/", chirps_files[grepl(paste0(interval, ".csv"), chirps_files)])))
+  ## rename CHIRPS precip column with interval
+    new_name <- paste0("CHIRPS_precip_", year, "_", interval)
+    chirps_data_temp[[new_name]] <- chirps_data_temp$CHIRPS_precip
+    chirps_data_temp$CHIRPS_precip <- NULL   
+  
+  ## join data to existing chirps_data df
+    chirps_data <- merge(chirps_data,
+                         chirps_data_temp[, c('CHIRPS_LAT', 'CHIRPS_LON', new_name)],
+                         by = c('CHIRPS_LAT', 'CHIRPS_LON'))
+                         
+  }
+  
+}
+
+```
+
+
+## Calculate CHIRPS monthly index for each interval, starting in year 1981
+## We calculate the CHIRPS index starting in 2012, because we need a 30 year baseline (1981-2010) and one year gap (2011)
+## Also we need to recalculate CPC index using a 1981 start year.
+
+```{r}
+
+## add CHIRPS index
+for(year in 2012:2023){
+  print(year)
+  for(interval in 625:635){
+  #  print(interval)
+    current_year_precip <- chirps_data[[paste0("CHIRPS_precip_",
+                                                    year,
+                                                    "_",
+                                                    interval) ]]
+    baseline_precip_columns <- paste0("CHIRPS_precip_",
+                                      1981:(year - 2),
+                                      "_",
+                                      interval)
+    baseline_avg <- rowMeans(chirps_data[, baseline_precip_columns ])
+
+    chirps_data[[paste0("CHIRPS_index_", year, "_", interval)]] <- round(current_year_precip/baseline_avg,  5)
+  }
+}
+
+## add CPC index starting in 1981
+for(year in 2012:2023){
+  print(year)
+  for(interval in 625:635){
+    current_year_precip <- chirps_data[[paste0("precip_",
+                                                    year,
+                                                    ".",
+                                                    interval) ]]
+  #  print(current_year_precip)
+    baseline_precip_columns <- paste0("precip_",
+                                      1981:(year - 2),
+                                      ".",
+                                      interval)
+  #  print(head(chirps_data[, baseline_precip_columns ]))
+    baseline_avg <- rowMeans(chirps_data[, baseline_precip_columns ],
+                             na.rm = T)
+  #  print(baseline_avg)
+
+    chirps_data[[paste0("cpc_index_1981_base_", year, "_", interval)]] <- round(current_year_precip/baseline_avg,  5)
+  }
+}
+
+## save chirps_data file which contains all CPC and CHIRPS indices
+save(chirps_data, file = paste0(here("data/outputs/"), "chirps_data_TX_ri.rda"))
+
+```
+
+## Calculate a "coarse" version of the CHIRPS index
+
+```{r}
+
+## calculate CHIRPS (coarse) precip and index values 
+
+## coarsen raw precip
+chirps_columns <- grep("CHIRPS_precip_", colnames(chirps_data), value = TRUE)
+
+for(name in chirps_columns){
+  print(name)
+  chirps_data <- chirps_data %>%
+    group_by(GRIDCODE) %>%
+    mutate(!!paste0(name, "_coarse") := mean(!!sym(name), na.rm = TRUE)) %>%
+    ungroup()
+}
+
+## update column names so that they end in year and interval
+# Rename dataframe columns 
+colnames(chirps_data) <- gsub(
+  pattern = "^(CHIRPS_precip)_(\\d{4})_(\\d{3})_(coarse)$", 
+  replacement = "\\1_\\4_\\2_\\3", 
+  x = colnames(chirps_data)
+)
+
+## recalculate RI values for CHIRPS-coarse
+## add CHIRPS (coarse) index
+for(year in 2012:2023){
+  print(year)
+  for(interval in 625:635){
+    current_year_precip <- chirps_data[[paste0("CHIRPS_precip_coarse_",
+                                                    year,
+                                                    "_",
+                                                    interval, "") ]]
+    baseline_precip_columns <- paste0("CHIRPS_precip_coarse_",
+                                      1981:(year - 2),
+                                      "_",
+                                      interval, "")
+    baseline_avg <- rowMeans(chirps_data[, baseline_precip_columns ])
+
+    chirps_data[[paste0("CHIRPS_index_coarse_", year, "_", interval)]] <- round(current_year_precip/baseline_avg,  5)
+  }
+}
+
+save(chirps_data, file = paste0(here("data/outputs/"), "chirps_data_TX_ri.rda"))
+
+## view example
+View(chirps_data %>% filter(GRIDCODE == 7329) %>% select(CHIRPS_precip_coarse_2017_630, CHIRPS_precip_2017_630, CHIRPS_index_coarse_2017_630, CHIRPS_index_2017_630))
+
+print(chirps_data %>% filter(GRIDCODE == 7329) %>% select(CHIRPS_precip_coarse_2017_630, CHIRPS_precip_2017_630, CHIRPS_index_coarse_2017_630, CHIRPS_index_2017_630) %>% colMeans())
+```
