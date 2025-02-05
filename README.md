@@ -6,16 +6,16 @@ This repository calculates payouts for the PRF_RI insurance program for two diff
 
 
 ## Input Data Sources
-- [CHIRPS rainfall data] . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
-- [CPC rainfall data] . Downloaded using the `rnoaa` package in [`download_cpc.R`](scripts/R/download_cpc.R)
-- [CPC grid boundaries]() . Used in both GEE and R scripts.
-- [PRF Statement of Business]() . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('State/County/Crop/Coverage Level 1989 - Present')
-- [PRF Type Practice Unit]() . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('Type/Practice/Unit Structure Data Files'). Contains more granular data including interval selection.
-- [TX Counties] . Downloaded from [Texas Tech](https://www.depts.ttu.edu/geospatial/center/TexasGISData.html) (jurisdictional boundaries)
-- [TX rates and County-Base Values] . Downloaded from USDA RMA API in [`extract-rates.py`](scripts/python/extract-rates.py).  **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**
-- [TX County Areas] . Table of county proportions belonging to CPC and CHIRPS grid cells. Calculated using GEE scripts for [CPC](https://code.earthengine.google.com/bb14c742606a6e78d2394e2b79022fb2) and [CHIRPS](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) .
-- [Cropland Data Layer](). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
-- [Koppen Climate Classification]() Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
+- [CHIRPS rainfall data](https://umd.box.com/s/9e7tvqgfu8lop17u6kmbp655zl8iuiil) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
+- [CPC rainfall data](https://umd.box.com/s/c51a4d4bzr036w2zxbr4yc8xoxtyy8ou) . Downloaded using the `rnoaa` package in [`download_cpc.R`](scripts/R/download_cpc.R)
+- [CPC grid boundaries](https://umd.box.com/s/9twqpbm77aj58hwpwuy4kbu853fqpe8a) . Used in both GEE and R scripts.
+- [PRF Statement of Business](https://umd.box.com/s/tl9rd30bh7m7ocble3hf02r30vdq1kfk) . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('State/County/Crop/Coverage Level 1989 - Present')
+- [PRF Type Practice Unit](https://umd.box.com/s/gubd26v9809j6ldk7lh7t34s57suznrs) . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('Type/Practice/Unit Structure Data Files'). Contains more granular data including interval selection.
+- [TX Counties](https://umd.box.com/s/bkl1l8zvws2q2mvuxgegw7p03cyr617l) . Downloaded from [Texas Tech](https://www.depts.ttu.edu/geospatial/center/TexasGISData.html) (jurisdictional boundaries)
+- [TX rates and County-Base Values](https://umd.box.com/s/qkqsxb4tun0ww54dwsbhysuon2qbg4by) . Downloaded from USDA RMA API in [`extract-rates.py`](scripts/python/extract-rates.py).  **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**
+- [TX County Areas](https://umd.box.com/s/ni2zesuhjz4z7j1pk6wsr4abahpwr0a7) . Table of county proportions belonging to CPC and CHIRPS grid cells. Calculated using GEE scripts for [CPC](https://code.earthengine.google.com/bb14c742606a6e78d2394e2b79022fb2) and [CHIRPS](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) .
+- [Cropland Data Layer](https://umd.box.com/s/lifkf8gt8c4uz1wjtcay4pqpyum5e0r9). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
+- [Koppen Climate Classification](https://umd.box.com/s/8gw6s3bf4utua85uve1phexmo21it79h) Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
 
 Final input data files are available on [Box](), and should be added to the folder [`data`]() .
 
