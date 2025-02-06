@@ -25,6 +25,7 @@ library(grid)
 library(gridExtra)
 library(xtable)
 library(patchwork)
+library(scales)
 
 conflicted::conflict_prefer("select", "dplyr")
 conflicted::conflict_prefer("filter", "dplyr")
@@ -42,7 +43,7 @@ source(here("scripts/R/plotting_functions.R"))
 
 
 ## Payout magnitudes
-## Tables 3, A1, A5 
+## Tables 3, A1, A2, A3, A4, A5 
 ## Figures 4, A11
 
 
@@ -147,7 +148,7 @@ for (k in 1:nrow(year_df)){
 
 
 
-## Export Table A.5
+## Export Table A5
 ```{r}
 
 xtable_output(year_df, 
@@ -255,6 +256,7 @@ xtable_output(year_df,
 
 
 #### Table for all year payouts (CPC 1981 estimated vs CPC 1948 estimated)
+Export Table A2
 ```{r}
 
 year_df <- data.frame(Year = 2012:2023)
@@ -288,13 +290,15 @@ for (k in 1:nrow(year_df)){
 
 
 xtable_output(year_df, 
-              "estimated_cpc_1948_cpc_1981",
+              "TabA2_estimated_cpc_1948_cpc_1981",
               "Comparison of CPC Estimated with 1948 start year vs. with 1981 start year.")
 
 ```
 
 
 #### Table for all year payouts (CHIRPS fine vs CHIRPS coarse)
+Export Table A4
+
 ```{r}
 
 year_df <- data.frame(Year = 2012:2023)
@@ -332,7 +336,7 @@ for (k in 1:nrow(year_df)){
 
 
 xtable_output(year_df, 
-              "estimated_chirps_coarse_fine",
+              "TabA4_estimated_chirps_coarse_fine",
               "Comparison of estimated indemnities for CHIRPS using fine (0.05 degrees) and coarsened (0.25 degrees) resolution.")
 
 
@@ -341,6 +345,8 @@ xtable_output(year_df,
 
 
 #### Table for 2021-23 payouts (CPC 1981 vs CPC 1981-CDL)
+Export Table A3
+
 ```{r}
 
 year_df <- data.frame(Year = 2021:2023)
@@ -378,7 +384,7 @@ for (k in 1:nrow(year_df)){
 
 
 xtable_output(year_df, 
-              "estimated_cpc_1981_cpc_cdl",
+              "TabA3_estimated_cpc_1981_cpc_cdl",
               "Comparison of CPC Estimated with Cropland Data Layer weighting for CPC grids cells, and with proportional area weighting.")
 
 ```
@@ -684,7 +690,7 @@ p3 <- ggplot(tx_counties) +
   theme_minimal() +
   labs(title = "Difference (CHIRPS - CPC)") + 
   theme(
-    legend.text = element_text(size = 16),
+    legend.text = element_text(size = 14),
     legend.title = element_text(size = 14),
     text = element_text(size = 14),
     legend.position = "bottom",  # Position legend below
@@ -745,7 +751,7 @@ p4 <- ggplot(tx_counties) +
   theme_minimal() +
   labs(title = "Ratio (CHIRPS/CPC)") + 
   theme(
-    legend.text = element_text(size = 16),
+    legend.text = element_text(size = 14),
     legend.title = element_text(size = 14),
     text = element_text(size = 14),
     legend.position = "bottom",  # Position legend below
@@ -765,17 +771,17 @@ p4 <- ggplot(tx_counties) +
 prow <- plot_grid(
   p3  + 
     guides(fill = guide_legend(nrow = 2,
-                                     title.position = "left",
-)) + # Use 'fill' instead of 'color'
+                               title.position = "left")) + 
     theme(legend.justification = c(0, 0),
-          legend.position = c(0, -0.2),
-          legend.text = element_text(size = 11) ),
+          legend.position = c(-0.05, -0.2),
+          legend.text = element_text(size = 13),
+          legend.spacing.x = unit(0.01, "cm")),
   p4  + guides(fill = guide_legend(nrow = 2,
-                                     title.position = "left",
-)) + # Use 'fill' instead of 'color'
+                                     title.position = "left")) +
     theme(legend.justification = c(0, 0),
-          legend.position = c(0.15, -0.2),
-          legend.text = element_text(size = 11) ),
+          legend.position = c(0.12, -0.2),
+          legend.text = element_text(size = 13),
+          legend.spacing.x = unit(0.01, "cm")),
   labels = c("A", "B"),  # Add labels to each plot
   label_size = 16,  # Adjust label size
   label_fontface = "bold",  # Make labels bold
