@@ -3,28 +3,28 @@
 This repository calculates payouts for the PRF_RI insurance program for two different precipitation data sets, related to this manuscript. The first, is the CPC derived precipitation used in the current model. The second, is finer scale (0.05 degrees) CHIRPS precipitation data. 
 
 ## Input Data Sources
-- [CHIRPS rainfall data](https://umd.box.com/s/9e7tvqgfu8lop17u6kmbp655zl8iuiil) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb)
-- [CPC rainfall data](https://umd.box.com/s/c51a4d4bzr036w2zxbr4yc8xoxtyy8ou) . Downloaded using the `rnoaa` package in [`download_cpc.R`](scripts/R/download_cpc.R)
+- [CHIRPS rainfall data](https://umd.box.com/s/9e7tvqgfu8lop17u6kmbp655zl8iuiil) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`0_2_PRF_RI_CHIRPS_TX.ipynb`](scripts/python/0_2_PRF_RI_CHIRPS_TX.ipynb)
+- [CPC rainfall data](https://umd.box.com/s/c51a4d4bzr036w2zxbr4yc8xoxtyy8ou) . Downloaded using the [`rnoaa`](https://github.com/ropensci/rnoaa) package in [`0_1_download_cpc.R`](scripts/R/0_1_download_cpc.R)
 - [CPC grid boundaries](https://umd.box.com/s/9twqpbm77aj58hwpwuy4kbu853fqpe8a) . Used in both GEE and R scripts.
-- [PRF Statement of Business](https://umd.box.com/s/tl9rd30bh7m7ocble3hf02r30vdq1kfk) . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('State/County/Crop/Coverage Level 1989 - Present')
-- [PRF Type Practice Unit](https://umd.box.com/s/gubd26v9809j6ldk7lh7t34s57suznrs) . Downloaded from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) ('Type/Practice/Unit Structure Data Files'). Contains more granular data including interval selection.
+- [PRF Statement of Business](https://umd.box.com/s/tl9rd30bh7m7ocble3hf02r30vdq1kfk) . Downloaded 'State/County/Crop/Coverage Level 1989 - Present' from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business)
+- [PRF Type Practice Unit](https://umd.box.com/s/gubd26v9809j6ldk7lh7t34s57suznrs) . Downloaded 'Type/Practice/Unit Structure Data Files' from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business) . Contains more granular data including interval selection.
 - [TX Counties](https://umd.box.com/s/bkl1l8zvws2q2mvuxgegw7p03cyr617l) . Downloaded from [Texas Tech](https://www.depts.ttu.edu/geospatial/center/TexasGISData.html) (jurisdictional boundaries)
 - [TX rates and County-Base Values](https://umd.box.com/s/qkqsxb4tun0ww54dwsbhysuon2qbg4by) . Downloaded from USDA RMA API in [`extract-rates.py`](scripts/python/extract-rates.py).  **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**
-- [TX County Areas](https://umd.box.com/s/ni2zesuhjz4z7j1pk6wsr4abahpwr0a7) . Table of county proportions belonging to CPC and CHIRPS grid cells. Calculated using GEE scripts for [CPC](https://code.earthengine.google.com/bb14c742606a6e78d2394e2b79022fb2) and [CHIRPS](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) .
+- [TX County Areas](https://umd.box.com/s/ni2zesuhjz4z7j1pk6wsr4abahpwr0a7) . Table of county proportions belonging to CPC and CHIRPS grid cells.
 - [Cropland Data Layer](https://umd.box.com/s/lifkf8gt8c4uz1wjtcay4pqpyum5e0r9). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
 - [Koppen Climate Classification](https://umd.box.com/s/8gw6s3bf4utua85uve1phexmo21it79h) Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
 
 Final input data files are available on [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr), and should be added to the project folder [`data`]() .
 
 ## Output Files
-- [`outputs`]() Contains key intermediate and final output files.
-  - [`monthly_averages_na_rm.csv`]()
-  - [`chirps_data_TX_ri.rda`]()
-  - [`chirps_data_TX_region.rda`]()
-  - [`grids_cv_all_years.rda`]()
-- [`outputs\payouts`]() Simulated payout magnitudes for various data assumptions.
-- [`outputs\figures`]() Contains intermediate and final figures.
-- [`outputs\tables`]() LaTeX formatted tables
+- [`data/outputs`] Contains key intermediate and final output files.
+  - [`monthly_averages_na_rm.csv`] . Contains CPC monthly averages and rainfall index (RI) values using 1948 start year.
+  - [`chirps_data_TX_ri.rda`] . Contains CHIRPS grid level index calculations for all CPC and CHIRPS derived indices.
+  - [`chirps_data_TX_region.rda`] . Same as above, also contains field for Texas region (1 = West TX, 2 = East TX)
+  - [`grids_cv_all_years.rda`] . Contains coefficient of variation calculations at CPC grid level.
+- [`data/outputs/payouts`] Simulated payout magnitudes for various data assumptions. Uses RMA TPU level reports as starting point.
+- [`data/outputs/figures`] Contains intermediate and final figures.
+- [`data/outputs/tables`] LaTeX formatted tables
 
 ## Downloading CHIRPS data
 
@@ -42,7 +42,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 - Historic CPC raw values can be downloaded using the archived [rnoaa package](https://github.com/ropensci/rnoaa), using the script [`download_cpc.R`](scripts/R/download_cpc.R).
 
-- Premium rates and county base values (CBV) are downloaded from the USDA RMA API using the "extract-rates.py" script. The script extracts the data for all the counties for a given state for all the use types (5, e.g., grazing) and all the coverage levels (5, e.g., 70%) across the year 2023. Data are saved to files like "Texas-2023-grazing-70-rates.csv". The script extracts the data for all the counties for a given state, for all the intended uses (5) and all the coverage levels (5). We make the following assumptions.
+- Premium rates and county base values (CBV) are downloaded from the USDA RMA API using the [`extract-rates.py`](scripts/python/extract-rates.py) script. The script extracts the data for all the counties for a given state for all the use types (5, e.g., grazing) and all the coverage levels (5, e.g., 70%) across the year 2023. Data are saved to files like "Texas-2023-grazing-70-rates.csv". The script extracts the data for all the counties for a given state, for all the intended uses (5) and all the coverage levels (5). We make the following assumptions.
   - Extracted premium rates and CBV values do not depend on year. 
   - Intended use type only affects CBV.
   - Coverage level only affects premium rates.
@@ -51,12 +51,12 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 
 ## Replication
 - These steps assume input data sources have already been downloaded (using scripts starting with "0_")
-- Copy files from [Box]() to [`data`]() folder.
-- Process CPC data into monthly values using [`1_1_group_month_cpc_na_rm.R`]().
-- Calculate other rainfall indices using [`1_2_index_calculation.Rmd`]().
-- Calculate payouts with [`1_3_payout_calculations.Rmd`]().
-- Calculate CDL area weights with [`1_4_cdl_calculations.Rmd`]()
-- Create figures and tables with [`2_1_Figures.Rmd`]() through [`2_12_Figures.Rmd`]() .
+- Copy files from [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr) to top-level [`data`] folder.
+- Process CPC data into monthly values using [`1_1_group_month_cpc_na_rm.R`](scripts/R/1_1_group_month_cpc_na_rm.R).
+- Calculate other rainfall indices using [`1_2_index_calculation.Rmd`](scripts/R/1_2_index_calculation.Rmd).
+- Calculate payouts with [`1_3_payout_calculations.Rmd`](scripts/R/1_3_payout_calculations.Rmd).
+- Calculate CDL area weights with [`1_4_cdl_calculations.Rmd`](scripts/R/1_4_cdl_calculations.Rmd)
+- Create figures and tables with [`2_1_Figures.Rmd`](scripts/R/2_1_Figures.Rmd) through [`2_12_Figures.Rmd`](scripts/R/2_12_Figures.Rmd) .
 
 
 
