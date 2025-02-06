@@ -14,17 +14,17 @@ This repository calculates payouts for the PRF_RI insurance program for two diff
 - [Cropland Data Layer](https://umd.box.com/s/lifkf8gt8c4uz1wjtcay4pqpyum5e0r9). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
 - [Koppen Climate Classification](https://umd.box.com/s/8gw6s3bf4utua85uve1phexmo21it79h) Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
 
-Final input data files are available on [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr), and should be added to the project folder [`data`]() .
+Final input data files are available on [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr), and should be added to the project folder `data`.
 
 ## Output Files
-- [`data/outputs`] Contains key intermediate and final output files.
-  - [`monthly_averages_na_rm.csv`] . Contains CPC monthly averages and rainfall index (RI) values using 1948 start year.
-  - [`chirps_data_TX_ri.rda`] . Contains CHIRPS grid level index calculations for all CPC and CHIRPS derived indices.
-  - [`chirps_data_TX_region.rda`] . Same as above, also contains field for Texas region (1 = West TX, 2 = East TX)
-  - [`grids_cv_all_years.rda`] . Contains coefficient of variation calculations at CPC grid level.
-- [`data/outputs/payouts`] Simulated payout magnitudes for various data assumptions. Uses RMA TPU level reports as starting point.
-- [`data/outputs/figures`] Contains intermediate and final figures.
-- [`data/outputs/tables`] LaTeX formatted tables
+- `data/outputs` Contains key intermediate and final output files.
+  - `monthly_averages_na_rm.csv` . Contains CPC monthly averages and rainfall index (RI) values using 1948 start year.
+  - `chirps_data_TX_ri.rda` . Contains CHIRPS grid level index calculations for all CPC and CHIRPS derived indices.
+  - `chirps_data_TX_region.rda` . Same as above, also contains field for Texas region (1 = West TX, 2 = East TX)
+  - `grids_cv_all_years.rda` . Contains coefficient of variation calculations at CPC grid level.
+- `data/outputs/payouts` Simulated payout magnitudes for various data assumptions. Uses RMA TPU level reports as starting point.
+- `data/outputs/figures` Contains intermediate and final figures.
+- `data/outputs/tables` LaTeX formatted tables
 
 ## Downloading CHIRPS data
 
