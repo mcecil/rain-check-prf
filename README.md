@@ -2,7 +2,7 @@
 
 This repo calculates payouts for the PRF_RI insurance program for two different precipitation data sets (CPC and CHIRPS), for the ARER manuscript [Benami et al. 2025](). 
 
-All input and output data files, figures, and tables are available on [Box[(https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr) and should be added beneath the `data` folder for this repository.
+All input and output data files, figures, and tables are available on [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr) and should be added beneath the `data` folder for this repository.
 
 ## Replication
 - These steps assume input data sources have already been downloaded (using scripts starting with "0_")
