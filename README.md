@@ -14,7 +14,7 @@ All input and output data files, figures, and tables are available on [Box[(http
 - Create figures and tables with [`2_1_Figures.Rmd`](scripts/R/2_1_Figures.Rmd) through [`2_12_Figures.Rmd`](scripts/R/2_12_Figures.Rmd) .
 
 ## Input Data Sources
-- [CHIRPS rainfall data](https://umd.box.com/s/9e7tvqgfu8lop17u6kmbp655zl8iuiil) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`0_2_PRF_RI_CHIRPS_TX.ipynb`](scripts/python/0_2_PRF_RI_CHIRPS_TX.ipynb)
+- [CHIRPS rainfall data](https://umd.box.com/s/14vuybjg17sunovj391lu003rj8hi3ym) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`0_2_PRF_RI_CHIRPS_TX.ipynb`](scripts/python/0_2_PRF_RI_CHIRPS_TX.ipynb)
 - [CPC rainfall data](https://umd.box.com/s/c51a4d4bzr036w2zxbr4yc8xoxtyy8ou) . Downloaded using the [`rnoaa`](https://github.com/ropensci/rnoaa) package in [`0_1_download_cpc.R`](scripts/R/0_1_download_cpc.R)
 - [CPC grid boundaries](https://umd.box.com/s/9twqpbm77aj58hwpwuy4kbu853fqpe8a) . Used in both GEE and R scripts.
 - [PRF Statement of Business](https://umd.box.com/s/tl9rd30bh7m7ocble3hf02r30vdq1kfk) . Downloaded 'State/County/Crop/Coverage Level 1989 - Present' from [PRF records site](https://www.rma.usda.gov/tools-reports/summary-of-business/state-county-crop-summary-business)
