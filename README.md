@@ -1,6 +1,17 @@
-# PRF RI Notes.
+# Rain Check PRF RI.
 
-This repository calculates payouts for the PRF_RI insurance program for two different precipitation data sets, related to this manuscript. The first, is the CPC derived precipitation used in the current model. The second, is finer scale (0.05 degrees) CHIRPS precipitation data. 
+This repo calculates payouts for the PRF_RI insurance program for two different precipitation data sets (CPC and CHIRPS), for the ARER manuscript [Benami et al. 2025](). 
+
+All input and output data files, figures, and tables are available on [Box[(https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr) and should be added beneath the `data` folder for this repository.
+
+## Replication
+- These steps assume input data sources have already been downloaded (using scripts starting with "0_")
+- Copy files from [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr) to top-level [`data`] folder.
+- Process CPC data into monthly values using [`1_1_group_month_cpc_na_rm.R`](scripts/R/1_1_group_month_cpc_na_rm.R).
+- Calculate other rainfall indices using [`1_2_index_calculation.Rmd`](scripts/R/1_2_index_calculation.Rmd).
+- Calculate payouts with [`1_3_payout_calculations.Rmd`](scripts/R/1_3_payout_calculations.Rmd).
+- Calculate CDL area weights with [`1_4_cdl_calculations.Rmd`](scripts/R/1_4_cdl_calculations.Rmd)
+- Create figures and tables with [`2_1_Figures.Rmd`](scripts/R/2_1_Figures.Rmd) through [`2_12_Figures.Rmd`](scripts/R/2_12_Figures.Rmd) .
 
 ## Input Data Sources
 - [CHIRPS rainfall data](https://umd.box.com/s/9e7tvqgfu8lop17u6kmbp655zl8iuiil) . Downloaded from [Google Earth Engine]((https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD)) using [`0_2_PRF_RI_CHIRPS_TX.ipynb`](scripts/python/0_2_PRF_RI_CHIRPS_TX.ipynb)
@@ -14,7 +25,7 @@ This repository calculates payouts for the PRF_RI insurance program for two diff
 - [Cropland Data Layer](https://umd.box.com/s/lifkf8gt8c4uz1wjtcay4pqpyum5e0r9). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
 - [Koppen Climate Classification](https://umd.box.com/s/8gw6s3bf4utua85uve1phexmo21it79h) Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
 
-Final input data files are available on [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr), and should be added to the project folder `data`.
+Final input data files are available on [Box], 
 
 ## Output Files
 - `data/outputs` Contains key intermediate and final output files.
@@ -22,21 +33,21 @@ Final input data files are available on [Box](https://umd.box.com/s/0z6z6xpikrf7
   - `chirps_data_TX_ri.rda` . Contains CHIRPS grid level index calculations for all CPC and CHIRPS derived indices.
   - `chirps_data_TX_region.rda` . Same as above, also contains field for Texas region (1 = West TX, 2 = East TX)
   - `grids_cv_all_years.rda` . Contains coefficient of variation calculations at CPC grid level.
-- `data/outputs/payouts` Simulated payout magnitudes for various data assumptions. Uses RMA TPU level reports as starting point.
+- `data/outputs/payouts` Simulated payout magnitudes for various data spatiotemporal assumptions. Uses RMA TPU level reports as starting point.
 - `data/outputs/figures` Contains intermediate and final figures.
 - `data/outputs/tables` LaTeX formatted tables
 
 ## Downloading CHIRPS data
 
-[CHIRPS precip data](https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD) is downloaded from Google Earth Engine using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb) and aligned with CPC grids. The data is grouped in pentads (5-days) within each month, although the last "pentad" can vary in length, and represents all days from the 26th to the end of the month. We also use the [GEE script](https://code.earthengine.google.com/1134e155755e81a955bebc20df4f9c62) to extract CPC grid IDs by state. Outputs are files like "TX-grids.csv" with a single column containing all grid IDs in the state.
+[CHIRPS precip data](https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_PENTAD) is downloaded from Google Earth Engine (GEE) using [`PRF_RI_CPC_CHIRPS.ipynb`](scripts/python/PRF_RI_CPC_CHIRPS.ipynb) and aligned with CPC grids. The data is grouped in pentads (5-days) within each month, although the last "pentad" can vary in length, and represents all days from the 26th to the end of the month. We also use the [GEE script](https://code.earthengine.google.com/1134e155755e81a955bebc20df4f9c62) to extract CPC grid IDs by state. Outputs are files like "TX-grids.csv" with a single column containing all grid IDs in the state.
 
 ## Determining county proportions
 
 PRF-RI statement of business data on enrollment is at the county level. Thus, we need to understand the percent of each county that is within different CPC grid ID's. (similar for CHIRPS) 
 
-- [GEE script](https://code.earthengine.google.com/6ed9ba3ec817ea886cd94d499ffb126b) calculates CPC grid areas. Outputs are the file "cpc-county-areas.csv" that contains a column "Proportion" that is the proportion of the county represented by each CPC grid (sums to 1 for each county).
+- [GEE script](https://code.earthengine.google.com/6ed9ba3ec817ea886cd94d499ffb126b) calculates CPC grid areas within each county. Outputs are the file "cpc-county-areas.csv" that contains a column "Proportion" that is the proportion of the county represented by each CPC grid (sums to 1 for each county).
 
-- [GEE script](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) for CHIRPS grid areas. Similar to above, but using CHIRPS grids. Outputs are files like " chirps-county-areas.csv, with columns "Total Area" representing the area of the CPC grid cell within the county, and "Area" representing the area of the CHIRPS pixel within that CPC area.
+- [GEE script](https://code.earthengine.google.com/11b9ab34fcaee8ec601e76fc7cb78532) calculates CHIRPS grid areas within each county. Outputs are files like " chirps-county-areas.csv, with columns "Total Area" representing the area of the CPC grid cell within the county, and "Area" representing the area of the CHIRPS pixel within that CPC area.
 
 ## Additional data collection notes
 
@@ -49,14 +60,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
 - Rates vary based on grid cell, interval, and year. **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**.
 
 
-## Replication
-- These steps assume input data sources have already been downloaded (using scripts starting with "0_")
-- Copy files from [Box](https://umd.box.com/s/0z6z6xpikrf7nspof4dtzn8iv2p8ulbr) to top-level [`data`] folder.
-- Process CPC data into monthly values using [`1_1_group_month_cpc_na_rm.R`](scripts/R/1_1_group_month_cpc_na_rm.R).
-- Calculate other rainfall indices using [`1_2_index_calculation.Rmd`](scripts/R/1_2_index_calculation.Rmd).
-- Calculate payouts with [`1_3_payout_calculations.Rmd`](scripts/R/1_3_payout_calculations.Rmd).
-- Calculate CDL area weights with [`1_4_cdl_calculations.Rmd`](scripts/R/1_4_cdl_calculations.Rmd)
-- Create figures and tables with [`2_1_Figures.Rmd`](scripts/R/2_1_Figures.Rmd) through [`2_12_Figures.Rmd`](scripts/R/2_12_Figures.Rmd) .
+
 
 
 
