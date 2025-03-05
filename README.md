@@ -25,8 +25,6 @@ All input and output data files, figures, and tables are available on [Box[(http
 - [Cropland Data Layer](https://umd.box.com/s/lifkf8gt8c4uz1wjtcay4pqpyum5e0r9). Downloaded from [USDA](https://www.nass.usda.gov/Research_and_Science/Cropland/Release/)
 - [Koppen Climate Classification](https://umd.box.com/s/8gw6s3bf4utua85uve1phexmo21it79h) Downloaded from [University of Idaho](https://www.arcgis.com/home/item.html?id=a1209a5383c04ef18addea0e10ab10e5)
 
-Final input data files are available on [Box], 
-
 ## Output Files
 - `data/outputs` Contains key intermediate and final output files.
   - `monthly_averages_na_rm.csv` . Contains CPC monthly averages and rainfall index (RI) values using 1948 start year.
@@ -57,7 +55,7 @@ PRF-RI statement of business data on enrollment is at the county level. Thus, we
   - Extracted premium rates and CBV values do not depend on year. 
   - Intended use type only affects CBV.
   - Coverage level only affects premium rates.
-- Rates vary based on grid cell, interval, and year. **Currently the RMA API is not working so we are using previously downloaded values for rates and CBV**.
+- Rates vary based on grid cell, interval, and year. **Currently the RMA API is not functional so we are using previously downloaded values for rates and CBV**.
 
 
 
