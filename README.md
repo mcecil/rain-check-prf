@@ -1,4 +1,4 @@
-# Rain Check PRF RI.
+# Rain Check PRF RI
 
 This repo calculates payouts for the PRF_RI insurance program for two different precipitation data sets (CPC and CHIRPS), for the ARER manuscript [Benami et al. 2025](). 
 
