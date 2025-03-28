@@ -40,6 +40,14 @@ source(here("scripts/R/plotting_functions.R"))
 ```
 
 
+```{r}
+
+load(here("data/outputs/chirps_data_TX_region.rda"))
+## remove NA values
+chirps_data <- chirps_data %>% filter(!is.na(cpc_index_1981_base_2012_625))
+
+```
+
 
 ## Intra-grid variation (CV)
 ## Fig 2
@@ -269,5 +277,141 @@ ggsave_ol(final_plot,
 
 ```
 
+
+## check just Gulf of Mexico grids
+```{r}
+
+load(file = here("data/outputs/grids_cv_all_years.rda"))
+
+gulf_shp <- st_read("/Users/mjcecil/Downloads/World_Seas_IHO_v1/World_Seas.shp") %>% filter(NAME == "Gulf of Mexico")
+
+gulf_shp_rpj <- st_transform(gulf_shp, crs(grids))
+
+# Create a 100 km buffer (assuming the CRS is in meters)
+gulf_buffered <- st_buffer(gulf_shp_rpj, dist = 100000)
+
+# Find grids that intersect the buffered region
+grids_gulf <- grids[st_intersects(grids, gulf_buffered, sparse = FALSE), ]
+
+# Plot to visualize
+plot(st_geometry(grids), col = "grey", alpha = 0.5)
+plot(st_geometry(gulf_shp_rpj[1,]), border = "blue", add = TRUE)
+plot(st_geometry(grids_gulf), col = "red", add = TRUE)
+
+```
+
+
+```{r}
+
+for(interval in 625:635){
+  print(interval)
+  columns_to_average <- paste0("CHIRPS_precip_2021_", interval, "_", 2012:2023, "_CV")
+  grids_gulf[[paste0("mean_cv_", interval)]] <- rowMeans((grids_gulf %>% st_drop_geometry())[, columns_to_average], na.rm = TRUE)
+  combined_values <- unlist((grids_gulf %>% st_drop_geometry() )[, columns_to_average])
+  print(mean(combined_values))
+  quantile_5 <- quantile(combined_values, probs = seq(0, 1, 0.05), na.rm = TRUE)
+  print(quantile_5)
+}
+
+```
+
+
+
+### East vs West Texas classification (CPC grids)
+
+```{r}
+
+## for CPC grids
+grids <- st_read(here("data/rainfall_index_grids/official_RMA_RI_grid.shp"))
+grids$lon <- rowMeans(cbind(grids$X_MIN, grids$X_MAX))
+grids$lat <- rowMeans(cbind(grids$Y_MIN, grids$Y_MAX))
+
+# monthly_averages_merge <- merge(grids, monthly_averages,
+#                           by = c("lon", "lat"))
+
+
+
+## filter to TX grid cells
+year <- 2023
+tx_grid_ids <- list.files(here("data/PRF-RI_CHIRPS/"), pattern = paste0("CHIRPS_precip_TX_", year, "_"), full.names = T) %>%
+  first() %>% read.csv() %>% pull(GRIDCODE) %>% unique()
+
+tx_grids <- grids %>% filter(GRIDCODE %in% tx_grid_ids)
+plot(tx_grids)
+
+tx_grids_rpj <- st_transform(tx_grids, crs(koppen_grid))
+
+## get unique classifications in TX grids
+summary_stats <- exact_extract(koppen_grid, tx_grids_rpj %>% st_union(), function(values, coverage_fraction) {
+    table(values)
+}, progress = TRUE)
+
+reclass_df <- data.frame(c(7, 8, 15, 18, 19,  22, 23),
+                         c(1, 1, 2, 2, 2, 2, 2))
+koppen_grid_rcl <- reclassify(koppen_grid, rcl = as.matrix(reclass_df))
+
+## extract values for TX grids
+summary_stats_rcl <- exact_extract(
+    koppen_grid_rcl,
+    tx_grids_rpj,
+    function(values, coverage_fraction) {
+        tbl <- table(values)
+        as.numeric(names(tbl)[which.max(tbl)])[1]
+    },
+    progress = TRUE
+)
+
+tx_grids_rpj$region <- summary_stats_rcl
+tx_grids_rpj[tx_grids_rpj$GRIDCODE == 9719, "region"] <- 1
+tx_grids_rpj[tx_grids_rpj$GRIDCODE %in%  c(7932, 8832, 9433), "region"] <- 2
+
+west_tx_grids <- tx_grids_rpj %>% filter(region == 1) %>% pull(GRIDCODE)
+east_tx_grids <- tx_grids_rpj %>% filter(region == 2) %>% pull(GRIDCODE)
+
+
+plot(tx_grids_rpj["region"])
+
+
+```
+
+## East and West TX stats
+
+```{r}
+
+load(file = here("data/outputs/grids_cv_all_years.rda"))
+
+grids_west <- grids %>% filter(GRIDCODE %in% west_tx_grids)
+grids_east <- grids %>% filter(GRIDCODE %in% east_tx_grids)
+
+## West TX
+
+print("West TX stats")
+
+for(interval in 625:635){
+  print(interval)
+  columns_to_average <- paste0("CHIRPS_precip_2021_", interval, "_", 2012:2023, "_CV")
+  grids_west[[paste0("mean_cv_", interval)]] <- rowMeans((grids_west %>% st_drop_geometry())[, columns_to_average], na.rm = TRUE)
+  combined_values <- unlist((grids_west %>% st_drop_geometry() )[, columns_to_average])
+  print(mean(combined_values))
+  quantile_5 <- quantile(combined_values, probs = seq(0, 1, 0.05), na.rm = TRUE)
+  print(quantile_5)
+}
+
+
+## East TX
+
+print("East TX stats")
+
+for(interval in 625:635){
+  print(interval)
+  columns_to_average <- paste0("CHIRPS_precip_2021_", interval, "_", 2012:2023, "_CV")
+  grids_east[[paste0("mean_cv_", interval)]] <- rowMeans((grids_east %>% st_drop_geometry())[, columns_to_average], na.rm = TRUE)
+  combined_values <- unlist((grids_east %>% st_drop_geometry() )[, columns_to_average])
+  print(mean(combined_values))
+  quantile_5 <- quantile(combined_values, probs = seq(0, 1, 0.05), na.rm = TRUE)
+  print(quantile_5)
+}
+
+```
 
 
