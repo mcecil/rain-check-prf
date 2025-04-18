@@ -18,3 +18,6 @@ data
 data/outputs/monthly_averages_na_rm.csv
 data/PRF_sob/raw_files
 .Rproj.user
+.vscode/
+.DS_Store
+
