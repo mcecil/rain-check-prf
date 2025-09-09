@@ -1,6 +1,6 @@
 # Rain Check PRF RI
 
-This repo calculates payouts for the PRF_RI insurance program for two different precipitation data sets (CPC and CHIRPS), for the ARER manuscript [Benami et al. 2025](). 
+This repo calculates payouts for the PRF_RI insurance program for two different precipitation data sets (CPC and CHIRPS), for the ARER manuscript [Benami et al. 2025](https://doi.org/10.1017/age.2025.10004). 
 
 All input and output data files, figures, and tables are available on [Zenodo](https://zenodo.org/records/15171495) and should be added beneath the `data` folder for this repository.
 
